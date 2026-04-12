@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import Engine
+from sqlalchemy import inspect
 from typing import List, Optional
 from .filters import should_include_table
 from genquery.core.context import SchemaContext, TableMetadata, ColumnMetadata, IndexMetadata
@@ -6,9 +7,9 @@ from genquery.config import GenQueryConfig
 from genquery.core.callbacks import GenQueryCallbackHandler
 
 class SchemaInspector:
-    def __init__(self, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
+    def __init__(self, engine: Engine, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
         self.config = config
-        self.engine = create_engine(config.connection_string)
+        self.engine = engine
         self.callbacks = callbacks or GenQueryCallbackHandler()
 
     def get_schema(self) -> SchemaContext:
@@ -31,12 +32,49 @@ class SchemaInspector:
             
         filtered_tables = [t for t in table_names if should_include_table(t, self.config.table_filters)]
 
+        use_multi = False
+        use_multi_comments = False
+        multi_columns = {}
+        multi_pk = {}
+        multi_indexes = {}
+        multi_comments = {}
+        multi_fks = {}
+
+        if hasattr(inspector, "get_multi_columns") and filtered_tables:
+            try:
+                schema_val = schema_kwargs.get("schema")
+                multi_columns = inspector.get_multi_columns(schema=schema_val, filter_names=filtered_tables)
+                multi_pk = inspector.get_multi_pk_constraint(schema=schema_val, filter_names=filtered_tables)
+                multi_indexes = inspector.get_multi_indexes(schema=schema_val, filter_names=filtered_tables)
+                multi_fks = inspector.get_multi_foreign_keys(schema=schema_val, filter_names=filtered_tables)
+                use_multi = True
+                
+                try:
+                    multi_comments = inspector.get_multi_table_comment(schema=schema_val, filter_names=filtered_tables)
+                    use_multi_comments = True
+                except NotImplementedError:
+                    pass
+            except Exception:
+                pass
+
         for table_name in filtered_tables:
             columns_meta = []
-            pk_constraint = inspector.get_pk_constraint(table_name, **schema_kwargs)
+            schema_tb = (schema_kwargs.get("schema"), table_name)
+            
+            if use_multi:
+                pk_constraint = multi_pk.get(schema_tb, {})
+                cols = multi_columns.get(schema_tb, [])
+                idxs = multi_indexes.get(schema_tb, [])
+                fks = multi_fks.get(schema_tb, [])
+            else:
+                pk_constraint = inspector.get_pk_constraint(table_name, **schema_kwargs)
+                cols = inspector.get_columns(table_name, **schema_kwargs)
+                idxs = inspector.get_indexes(table_name, **schema_kwargs)
+                fks = inspector.get_foreign_keys(table_name, **schema_kwargs)
+                
             pk_columns = pk_constraint.get("constrained_columns", [])
             
-            for col in inspector.get_columns(table_name, **schema_kwargs):
+            for col in cols:
                 col_type = str(col["type"])
                 columns_meta.append(ColumnMetadata(
                     name=col["name"],
@@ -46,24 +84,28 @@ class SchemaInspector:
                 ))
 
             indexes_meta = []
-            for idx in inspector.get_indexes(table_name, **schema_kwargs):
+            for idx in idxs:
                 indexes_meta.append(IndexMetadata(
                     name=idx.get("name", ""),
                     column_names=idx.get("column_names", []),
                     unique=idx.get("unique", False)
                 ))
                 
-            try:
-                comment = inspector.get_table_comment(table_name, **schema_kwargs)
+            if use_multi_comments:
+                comment = multi_comments.get(schema_tb, {})
                 description = comment.get("text")
-            except:
-                description = None
+            else:
+                try:
+                    comment = inspector.get_table_comment(table_name, **schema_kwargs)
+                    description = comment.get("text")
+                except:
+                    description = None
                 
             tables.append(TableMetadata(
                 name=table_name,
                 description=description,
                 columns=columns_meta,
-                foreign_keys=inspector.get_foreign_keys(table_name, **schema_kwargs),
+                foreign_keys=fks,
                 indexes=indexes_meta
             ))
             

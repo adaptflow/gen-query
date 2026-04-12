@@ -50,6 +50,7 @@ Available Schema:
             sql = sql.split("```sql")[1].split("```")[0].strip()
         elif "```" in sql:
             sql = sql.split("```")[1].split("```")[0].strip()
+        sql = sql.replace("\n", " ")
         return sql
 
     def execute_plan(self, plan: QueryPlan, schema: SchemaContext, dry_run: bool = False) -> Any:

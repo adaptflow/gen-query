@@ -1,4 +1,5 @@
-from typing import Any, Optional, List
+from genquery.core.utils import get_dialect
+from typing import Any, Optional
 from sqlalchemy import create_engine
 from genquery.adapters.base import LLMAdapter
 from genquery.config import GenQueryConfig
@@ -21,21 +22,21 @@ class GenQueryPipeline:
         self.config = config
         self.llm = llm
         self.callbacks = callbacks or GenQueryCallbackHandler()
-        self.engine = create_engine(self.config.connection_string)
+        self.engine = create_engine(self.config.connection_string, connect_args={'options': f'-csearch_path={self.config.schema_name}'})
         
-        self.inspector = SchemaInspector(self.engine)
+        self.inspector = SchemaInspector(self.engine, self.config, self.callbacks)
         self.ranker = SemanticRanker(self.llm)
         self.planner = QueryPlanner(self.llm)
         
         # We need dialect from engine for validator
-        dialect_name = self.engine.dialect.name
+        dialect_name = get_dialect(self.engine)
         self.validator = SecurityValidator(dialect=dialect_name)
         self.executor = QueryExecutor(self.llm, self.engine, self.validator, self.callbacks)
 
     def execute(self, query: str, dry_run: bool = False) -> QueryResult:
         # 1. Schema Inspection
         self.callbacks.on_inspector_start()
-        schema_context = self.inspector.inspect(self.config.schema_name, self.config.table_filters)
+        schema_context = self.inspector.get_schema()
         self.callbacks.on_inspector_end(len(schema_context.tables))
 
         # 2. Rank Tables

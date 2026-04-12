@@ -3,8 +3,8 @@ from .base import LLMAdapter, Message
 from typing import Any, List
 
 class OpenAIAdapter(LLMAdapter):
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
-        self.client = openai.OpenAI(api_key=api_key)
+    def __init__(self, api_key: str, model: str, base_url: str = "https://api.openai.com/v1"):
+        self.client = openai.OpenAI(base_url=base_url, api_key=api_key)
         self.model = model
 
     def complete(self, messages: List[Message], **kwargs: Any) -> str:

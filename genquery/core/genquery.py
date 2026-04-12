@@ -30,5 +30,4 @@ class GenQuery:
         """
         Generate SQL, plan, and execute returning the resulting DataFrame.
         """
-        result = self.pipeline.execute(query, dry_run=False)
-        return result.df
+        return self.pipeline.execute(query, dry_run=False)
