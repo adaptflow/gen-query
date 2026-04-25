@@ -7,6 +7,33 @@ from genquery.core.state import PipelineStage, PipelineState
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.config import GenQueryConfig
 
+
+PLANNER_DEFAULT_PROMPT = """
+You are an expert database architect. You must generate an execution plan for a user's natural language query.
+The SQL dialect is: {dialect}.
+
+User query: {query}
+
+Available Schema:
+{table_info}
+
+Create a structured plan. The output must be valid JSON matching this schema:
+{{
+  "strategy": "single" | "sequential" | "parallel",
+  "steps": [
+    {{
+      "id": "step_1",
+      "description": "Describe what this step does",
+      "depends_on": ["id_of_previous_step"],
+      "output_alias": "temp_result_name",
+      "receives_context": "temp_result_name"
+    }}
+  ]
+}}
+
+Return ONLY the JSON object.
+"""
+
 class QueryPlannerStage(PipelineStage):
     """
     Stage 3: Query Planner (Agentic).
@@ -35,36 +62,10 @@ class QueryPlannerStage(PipelineStage):
             for t in schema.tables:
                 table_info += f"Table: {t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
 
-        default_prompt = """
-You are an expert database architect. You must generate an execution plan for a user's natural language query.
-The SQL dialect is: {dialect}.
-
-User query: {query}
-
-Available Schema:
-{table_info}
-
-Create a structured plan. The output must be valid JSON matching this schema:
-{{
-  "strategy": "single" | "sequential" | "parallel",
-  "steps": [
-    {{
-      "id": "step_1",
-      "description": "Describe what this step does",
-      "depends_on": ["id_of_previous_step"],
-      "output_alias": "temp_result_name",
-      "receives_context": "temp_result_name"
-    }}
-  ]
-}}
-
-Return ONLY the JSON object.
-"""
-        prompt_template = self.config.prompts.load_prompt("planner_prompt_path", default_prompt)
+        prompt_template = self.config.prompts.load_prompt("planner_prompt_path", PLANNER_DEFAULT_PROMPT)
         prompt = prompt_template.replace("{query}", query).replace("{table_info}", table_info).replace("{dialect}", dialect)
 
         response = self.llm.complete([Message(role="user", content=prompt)])
-        
         try:
             content = response.strip()
             if "```json" in content:

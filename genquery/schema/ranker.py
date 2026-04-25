@@ -6,6 +6,16 @@ from genquery.core.state import PipelineStage, PipelineState
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.config import GenQueryConfig
 
+RANKER_DEFAULT_PROMPT = """
+Given the following database tables, identify the most relevant tables needed to answer the user's query.
+Return *only* a JSON array of strings containing the table names, up to {top_k} tables.
+
+User query: {query}
+
+Tables:
+{table_info}
+"""
+
 class SemanticRankerStage(PipelineStage):
     """
     Stage 2: Semantic Table Ranker.
@@ -42,17 +52,8 @@ class SemanticRankerStage(PipelineStage):
             if t.description:
                 table_info += f"  Description: {t.description}\n"
 
-        default_prompt = """
-Given the following database tables, identify the most relevant tables needed to answer the user's query.
-Return *only* a JSON array of strings containing the table names, up to {top_k} tables.
-
-User query: {query}
-
-Tables:
-{table_info}
-"""
         # Load from config or use default
-        prompt_template = self.config.prompts.load_prompt("ranker_prompt_path", default_prompt)
+        prompt_template = self.config.prompts.load_prompt("ranker_prompt_path", RANKER_DEFAULT_PROMPT)
         prompt = prompt_template.replace("{query}", query).replace("{table_info}", table_info).replace("{top_k}", str(top_k))
 
         response = self.llm.complete([Message(role="user", content=prompt)])

@@ -24,24 +24,16 @@ class GenQuery:
         custom_stages: Optional[List[PipelineStage]] = None
     ):
         if config_path:
-            self.config = GenQueryConfig.from_yaml(config_path)
-            if connection_string:
-                self.config.connection_string = connection_string
-            if schema and schema != "public":
-                 self.config.schema_name = schema
+            self.config = GenQueryConfig.from_yaml(config_path, connection_string=connection_string, schema_name=schema)
         else:
-            if not connection_string:
-                raise ValueError("connection_string must be provided if config_path is not specified")
             filter_config = TableFilterConfig(**table_filter) if table_filter else TableFilterConfig()
             self.config = GenQueryConfig(
                 connection_string=connection_string,
                 schema_name=schema,
                 table_filters=filter_config
             )
-            
         self.llm = llm
         self.callbacks = callbacks or GenQueryCallbackHandler()
-        
         # Connect to engine
         connect_args = {}
         # Only postgres accepts -csearch_path
@@ -53,9 +45,9 @@ class GenQuery:
         self.validator = SecurityValidator(dialect=dialect_name)
 
         if custom_stages is not None:
-             self.pipeline = GenQueryPipeline(stages=custom_stages)
+            self.pipeline = GenQueryPipeline(stages=custom_stages)
         else:
-             self.pipeline = self._build_default_pipeline()
+            self.pipeline = self._build_default_pipeline()
 
     def _build_default_pipeline(self) -> GenQueryPipeline:
         pipeline = GenQueryPipeline()
@@ -72,7 +64,7 @@ class GenQuery:
         """
         state = PipelineState(
             query=query, 
-            context={"dry_run": True}
+            context={"dry_run": False}
         )
         return self.pipeline.execute(state)
 

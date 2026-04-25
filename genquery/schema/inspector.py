@@ -1,31 +1,57 @@
+from genquery.core.utils import get_dialect
 from sqlalchemy import Engine
 from sqlalchemy import inspect
 from typing import List, Optional
-from .filters import should_include_table
+from genquery.schema.filters import should_include_table
 from genquery.core.context import SchemaContext, TableMetadata, ColumnMetadata, IndexMetadata
 from genquery.config import GenQueryConfig
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.core.state import PipelineStage, PipelineState
+from genquery.schema.cache import SchemaCache
+import threading
 
 class SchemaInspectorStage(PipelineStage):
     def __init__(self, engine: Engine, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
         self.config = config
         self.engine = engine
         self.callbacks = callbacks or GenQueryCallbackHandler()
+        self.cache = SchemaCache(config)
 
     def run(self, state: PipelineState) -> PipelineState:
         if state.schema_context is not None:
             # Skip if schema context was already provided by developer
             return state
             
+        # Try Cache First
+        cached_schema = self.cache.get()
+        if cached_schema:
+            state.schema_context = cached_schema
+            # If approaching TTL, refresh in background
+            if self.cache.should_refresh_soon():
+                self._trigger_background_refresh()
+            return state
+
+        # If empty or expired, block and fetch
         state.schema_context = self.get_schema()
+        self.cache.set(state.schema_context)
+        
         return state
+        
+    def _trigger_background_refresh(self):
+        def refresh_job():
+            try:
+                new_schema = self.get_schema()
+                self.cache.set(new_schema)
+            except Exception as e:
+                pass # Safe background failure
+        t = threading.Thread(target=refresh_job, daemon=True)
+        t.start()
 
     def get_schema(self) -> SchemaContext:
         self.callbacks.on_inspector_start()
         
         inspector = inspect(self.engine)
-        dialect_name = self.engine.dialect.name
+        dialect_name = get_dialect(self.engine)
         
         # Determine schema argument
         schema_kwargs = {}

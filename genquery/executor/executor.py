@@ -9,6 +9,20 @@ from genquery.executor.result_store import ResultStore
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.core.state import PipelineStage, PipelineState
 from genquery.config import GenQueryConfig
+from genquery.executor.modifier import apply_security_and_limits
+
+
+GENERATOR_DEFAULT_PROMPT = """
+You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {dialect} dialect for the following task:
+
+Task: {task_description}
+
+Available Schema:
+{table_info}
+{previous_context_block}
+{error_context_block}
+Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or explanations.
+"""
 
 class ExecutionError(Exception):
     pass
@@ -50,18 +64,7 @@ class QueryExecutorStage(PipelineStage):
         prev_block = f"\nPrevious Step Results Context:\n{previous_results}\n" if previous_results else ""
         err_block = f"\nWarning! The previous query failed with this error. Please correct your SQL:\n{error_context}\n" if error_context else ""
 
-        default_prompt = """
-You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {dialect} dialect for the following task:
-
-Task: {task_description}
-
-Available Schema:
-{table_info}
-{previous_context_block}
-{error_context_block}
-Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or explanations.
-"""
-        prompt_template = self.config.prompts.load_prompt("generator_prompt_path", default_prompt)
+        prompt_template = self.config.prompts.load_prompt("generator_prompt_path", GENERATOR_DEFAULT_PROMPT)
         prompt = prompt_template.replace("{dialect}", dialect)\
                                 .replace("{task_description}", step.description)\
                                 .replace("{table_info}", table_info)\
@@ -79,7 +82,7 @@ Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or exp
         return sql
 
     def execute_plan(self, plan: QueryPlan, schema: SchemaContext, dry_run: bool = False) -> Any:
-        import pandas as pd
+        import polars as pl
         
         results_store = ResultStore()
         final_result = None
@@ -108,13 +111,30 @@ Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or exp
                 # 3. Execute
                 try:
                     with self.engine.connect() as conn:
+                        # AST modification
+                        sql = apply_security_and_limits(
+                            sql, 
+                            schema.dialect if schema else "generic", 
+                            limit=self.config.row_limit,
+                            tenant_id=self.config.tenant_id if schema.dialect != "postgres" else None
+                        )
+                        
                         query_to_run = sql
                         if dry_run:
                             # Use EXPLAIN for dry run
                             query_to_run = f"EXPLAIN {sql}"
                             
-                        # Need to handle pandas returning None for some reason? read_sql_query always returns DF if query returns rows.
-                        df = pd.read_sql_query(text(query_to_run), conn)
+                        # Apply Postgres explicit session variable for RLS
+                        if self.config.tenant_id and schema.dialect == "postgres":
+                            conn.execute(text(f"SET LOCAL app.tenant_id = '{self.config.tenant_id}'"))
+                            
+                        # Set statement timeout
+                        if schema.dialect == "postgres":
+                            conn.execute(text(f"SET statement_timeout = {self.config.statement_timeout_ms}"))
+                        elif schema.dialect == "mysql":
+                            conn.execute(text(f"SET SESSION MAX_EXECUTION_TIME = {self.config.statement_timeout_ms}"))
+                            
+                        df = pl.read_database(query=query_to_run, connection=conn)
                         result_df = df
                         success = True
                         if not dry_run:

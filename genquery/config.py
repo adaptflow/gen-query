@@ -1,6 +1,6 @@
 import yaml
 from pydantic import BaseModel, Field
-from typing import List, Optional, Pattern, Any
+from typing import List, Optional, Pattern
 import os
 
 class TableFilterConfig(BaseModel):
@@ -17,7 +17,6 @@ class PromptsConfig(BaseModel):
     ranker_prompt_path: Optional[str] = None
     planner_prompt_path: Optional[str] = None
     generator_prompt_path: Optional[str] = None
-    
     def load_prompt(self, path_attr: str, default_prompt: str) -> str:
         """
         Helper to load a prompt from file if specified, else returning the default.
@@ -33,13 +32,24 @@ class GenQueryConfig(BaseModel):
     schema_name: str = "public"
     table_filters: TableFilterConfig = Field(default_factory=TableFilterConfig)
     prompts: PromptsConfig = Field(default_factory=PromptsConfig)
+    tenant_id: Optional[str] = None
+    statement_timeout_ms: int = 15000
+    schema_cache_ttl_seconds: int = 3600
+    schema_cache_dir: str = ".gq_cache"
+    row_limit: int = 1000
 
     @classmethod
-    def from_yaml(cls, path: str) -> "GenQueryConfig":
+    def from_yaml(cls, path: str, connection_string: Optional[str] = None, schema_name: Optional[str] = None) -> "GenQueryConfig":
         if not os.path.exists(path):
             raise FileNotFoundError(f"Config file not found at: {path}")
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
         if not data:
             data = {}
+        if connection_string:
+            data['connection_string'] = connection_string
+        elif 'connection_string' not in data or not data['connection_string']:
+            raise ValueError("connection_string must be provided if config_path is not specified")
+        if schema_name:
+            data['schema_name'] = schema_name
         return cls(**data)

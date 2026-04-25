@@ -1,0 +1,28 @@
+# Example configuration for GenQuery
+
+# connection_string: "postgresql://user:password@localhost:5432/dbname"
+schema: "public"
+
+table_filters:
+  include:
+    # - "users"
+    # - "orders"
+  exclude:
+    # - "passwords"
+    # - "secrets"
+
+prompts:
+  ranker_prompt_path: "prompts/ranker_prompt.txt"
+  planner_prompt_path: "prompts/planner_prompt.txt"
+  generator_prompt_path: "prompts/generator_prompt.txt"
+
+# Row Level Security Tenant ID (Postgres session or AST injection)
+# tenant_id: "customer_123"
+
+# Query execution constraints
+statement_timeout_ms: 15000
+row_limit: 1000
+
+# Cache configurations
+schema_cache_ttl_seconds: 3600
+schema_cache_dir: ".gq_cache"
