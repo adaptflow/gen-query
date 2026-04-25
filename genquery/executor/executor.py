@@ -116,7 +116,8 @@ class QueryExecutorStage(PipelineStage):
                             sql, 
                             schema.dialect if schema else "generic", 
                             limit=self.config.row_limit,
-                            tenant_id=self.config.tenant_id if schema.dialect != "postgres" else None
+                            rls_policies=self.config.rls_policies if schema.dialect != "postgres" else None,
+                            schema=schema
                         )
                         
                         query_to_run = sql
@@ -125,8 +126,10 @@ class QueryExecutorStage(PipelineStage):
                             query_to_run = f"EXPLAIN {sql}"
                             
                         # Apply Postgres explicit session variable for RLS
-                        if self.config.tenant_id and schema.dialect == "postgres":
-                            conn.execute(text(f"SET LOCAL app.tenant_id = '{self.config.tenant_id}'"))
+                        if self.config.rls_policies and schema.dialect == "postgres":
+                            for policy in self.config.rls_policies:
+                                if policy.session_variable:
+                                    conn.execute(text(f"SET LOCAL {policy.session_variable} = '{policy.value}'"))
                             
                         # Set statement timeout
                         if schema.dialect == "postgres":

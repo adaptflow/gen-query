@@ -16,8 +16,14 @@ prompts:
   planner_prompt_path: "prompts/planner_prompt.txt"
   generator_prompt_path: "prompts/generator_prompt.txt"
 
-# Row Level Security Tenant ID (Postgres session or AST injection)
-# tenant_id: "customer_123"
+# Row Level Security Policies (Postgres session or AST injection)
+# rls_policies:
+#   - column: "tenant_id"
+#     value: "customer_123"
+#     session_variable: "app.tenant_id"
+#   - column: "user_id"
+#     value: "user_456"
+#     session_variable: "app.user_id"
 
 # Query execution constraints
 statement_timeout_ms: 15000

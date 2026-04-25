@@ -10,6 +10,11 @@ class TableFilterConfig(BaseModel):
     prefix: Optional[str] = None
     suffix: Optional[str] = None
 
+class RLSPolicy(BaseModel):
+    column: str
+    value: str
+    session_variable: Optional[str] = None
+
 class PromptsConfig(BaseModel):
     """
     Configuration for prompt paths. Defaults will be loaded if empty or file not found.
@@ -32,7 +37,7 @@ class GenQueryConfig(BaseModel):
     schema_name: str = "public"
     table_filters: TableFilterConfig = Field(default_factory=TableFilterConfig)
     prompts: PromptsConfig = Field(default_factory=PromptsConfig)
-    tenant_id: Optional[str] = None
+    rls_policies: List[RLSPolicy] = Field(default_factory=list)
     statement_timeout_ms: int = 15000
     schema_cache_ttl_seconds: int = 3600
     schema_cache_dir: str = ".gq_cache"
