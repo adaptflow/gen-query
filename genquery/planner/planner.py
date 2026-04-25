@@ -1,23 +1,43 @@
 import json
+from typing import Optional
 from genquery.adapters.base import LLMAdapter, Message
 from genquery.core.context import SchemaContext
 from genquery.planner.plan_models import QueryPlan
+from genquery.core.state import PipelineStage, PipelineState
+from genquery.core.callbacks import GenQueryCallbackHandler
+from genquery.config import GenQueryConfig
 
-class QueryPlanner:
+class QueryPlannerStage(PipelineStage):
     """
     Stage 3: Query Planner (Agentic).
     """
-    def __init__(self, llm: LLMAdapter):
+    def __init__(self, llm: LLMAdapter, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
         self.llm = llm
+        self.config = config
+        self.callbacks = callbacks or GenQueryCallbackHandler()
+
+    def run(self, state: PipelineState) -> PipelineState:
+        self.callbacks.on_planner_start(state.query)
+        schema = state.ranked_schema or state.schema_context
+        
+        plan = self.plan(state.query, schema)
+        state.plan = plan
+        
+        self.callbacks.on_planner_end(plan)
+        return state
 
     def plan(self, query: str, schema: SchemaContext) -> QueryPlan:
         table_info = ""
-        for t in schema.tables:
-            table_info += f"Table: {t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
+        dialect = "generic"
+        
+        if schema:
+            dialect = schema.dialect
+            for t in schema.tables:
+                table_info += f"Table: {t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
 
-        prompt = f"""
+        default_prompt = """
 You are an expert database architect. You must generate an execution plan for a user's natural language query.
-The SQL dialect is: {schema.dialect}.
+The SQL dialect is: {dialect}.
 
 User query: {query}
 
@@ -40,6 +60,9 @@ Create a structured plan. The output must be valid JSON matching this schema:
 
 Return ONLY the JSON object.
 """
+        prompt_template = self.config.prompts.load_prompt("planner_prompt_path", default_prompt)
+        prompt = prompt_template.replace("{query}", query).replace("{table_info}", table_info).replace("{dialect}", dialect)
+
         response = self.llm.complete([Message(role="user", content=prompt)])
         
         try:

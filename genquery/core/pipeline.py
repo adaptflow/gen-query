@@ -1,63 +1,53 @@
-from genquery.core.utils import get_dialect
-from typing import Any, Optional
-from sqlalchemy import create_engine
-from genquery.adapters.base import LLMAdapter
-from genquery.config import GenQueryConfig
-from genquery.schema.inspector import SchemaInspector
-from genquery.schema.ranker import SemanticRanker
-from genquery.planner.planner import QueryPlanner
-from genquery.executor.executor import QueryExecutor
-from genquery.executor.validator import SecurityValidator
-from genquery.core.callbacks import GenQueryCallbackHandler
+from typing import Any, List, Optional
+from genquery.core.state import PipelineState, PipelineStage
 
 class QueryResult:
-    def __init__(self, sql: str, plan: Any, steps: Any, df: Any = None):
+    def __init__(self, sql: Optional[str], plan: Any, steps: Any, df: Any = None):
         self.sql = sql
         self.plan = plan
         self.steps = steps
         self.df = df
 
 class GenQueryPipeline:
-    def __init__(self, config: GenQueryConfig, llm: LLMAdapter, callbacks: Optional[GenQueryCallbackHandler] = None):
-        self.config = config
-        self.llm = llm
-        self.callbacks = callbacks or GenQueryCallbackHandler()
-        self.engine = create_engine(self.config.connection_string, connect_args={'options': f'-csearch_path={self.config.schema_name}'})
+    """
+    A customizable execution pipeline for GenQuery.
+    Executes a list of PipelineStages sequentially.
+    """
+    def __init__(self, stages: Optional[List[PipelineStage]] = None):
+        self.stages = stages or []
         
-        self.inspector = SchemaInspector(self.engine, self.config, self.callbacks)
-        self.ranker = SemanticRanker(self.llm)
-        self.planner = QueryPlanner(self.llm)
+    def add_stage(self, stage: PipelineStage):
+        self.stages.append(stage)
+
+    def replace_stage(self, target_class: type, new_stage: PipelineStage) -> bool:
+        """
+        Replaces the first stage that is an instance of `target_class` with `new_stage`.
+        Returns True if successful, False if no such stage was found.
+        """
+        for i, stage in enumerate(self.stages):
+            if isinstance(stage, target_class):
+                self.stages[i] = new_stage
+                return True
+        return False
         
-        # We need dialect from engine for validator
-        dialect_name = get_dialect(self.engine)
-        self.validator = SecurityValidator(dialect=dialect_name)
-        self.executor = QueryExecutor(self.llm, self.engine, self.validator, self.callbacks)
+    def remove_stage(self, target_class: type) -> bool:
+        """
+        Removes the first stage that is an instance of `target_class`.
+        Returns True if successful.
+        """
+        for i, stage in enumerate(self.stages):
+            if isinstance(stage, target_class):
+                self.stages.pop(i)
+                return True
+        return False
 
-    def execute(self, query: str, dry_run: bool = False) -> QueryResult:
-        # 1. Schema Inspection
-        self.callbacks.on_inspector_start()
-        schema_context = self.inspector.get_schema()
-        self.callbacks.on_inspector_end(len(schema_context.tables))
-
-        # 2. Rank Tables
-        self.callbacks.on_ranker_start(query)
-        ranked_schema = self.ranker.rank(schema_context, query)
-        self.callbacks.on_ranker_end(len(ranked_schema.tables))
-
-        # 3. Query Plan
-        self.callbacks.on_planner_start(query)
-        plan = self.planner.plan(query, ranked_schema)
-        self.callbacks.on_planner_end(plan)
-
-        # 4. Generate & Execute
-        df = self.executor.execute_plan(plan, ranked_schema, dry_run=dry_run)
-
-        # Synthesize final result (for now, last step's DF)
-        final_sql = self.executor.last_generated_sql
-        
+    def execute(self, state: PipelineState) -> QueryResult:
+        for stage in self.stages:
+            state = stage.run(state)
+            
         return QueryResult(
-            sql=final_sql,
-            plan=plan,
-            steps=plan.steps,
-            df=df
+            sql=state.sql,
+            plan=state.plan,
+            steps=state.plan.steps if state.plan else [],
+            df=state.df
         )

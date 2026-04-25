@@ -7,44 +7,69 @@ from genquery.planner.plan_models import QueryPlan, PlanStep
 from genquery.executor.validator import SecurityValidator
 from genquery.executor.result_store import ResultStore
 from genquery.core.callbacks import GenQueryCallbackHandler
+from genquery.core.state import PipelineStage, PipelineState
+from genquery.config import GenQueryConfig
 
 class ExecutionError(Exception):
     pass
 
-class QueryExecutor:
+class QueryExecutorStage(PipelineStage):
     """
     Stage 4: Query Generator + Executor Loop
     """
-    def __init__(self, llm: LLMAdapter, engine: Any, validator: SecurityValidator, callbacks: Optional[GenQueryCallbackHandler] = None):
+    def __init__(self, llm: LLMAdapter, engine: Any, validator: SecurityValidator, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
         self.llm = llm
         self.engine = engine
         self.validator = validator
+        self.config = config
         self.callbacks = callbacks or GenQueryCallbackHandler()
         self.max_retries = 3
         self.last_generated_sql = ""
 
+    def run(self, state: PipelineState) -> PipelineState:
+        schema = state.ranked_schema or state.schema_context
+        dry_run = state.context.get("dry_run", False)
+        
+        if not state.plan:
+            raise ExecutionError("QueryPlan is required for QueryExecutorStage")
+            
+        final_result = self.execute_plan(state.plan, schema, dry_run=dry_run)
+        
+        state.sql = self.last_generated_sql
+        state.df = final_result
+        return state
+
     def _generate_sql(self, step: PlanStep, schema: SchemaContext, error_context: str = "", previous_results: str = "") -> str:
         table_info = ""
-        for t in schema.tables:
-            table_info += f"Table: {t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
+        dialect = "generic"
+        if schema:
+            dialect = schema.dialect
+            for t in schema.tables:
+                table_info += f"Table: {t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
 
-        prompt = f"""
-You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {schema.dialect} dialect for the following task:
+        prev_block = f"\nPrevious Step Results Context:\n{previous_results}\n" if previous_results else ""
+        err_block = f"\nWarning! The previous query failed with this error. Please correct your SQL:\n{error_context}\n" if error_context else ""
 
-Task: {step.description}
+        default_prompt = """
+You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {dialect} dialect for the following task:
+
+Task: {task_description}
 
 Available Schema:
 {table_info}
+{previous_context_block}
+{error_context_block}
+Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or explanations.
 """
-        if previous_results:
-            prompt += f"\nPrevious Step Results Context:\n{previous_results}\n"
-        
-        if error_context:
-            prompt += f"\nWarning! The previous query failed with this error. Please correct your SQL:\n{error_context}\n"
-
-        prompt += "\nReturn ONLY the raw SQL query. Do not include markdown blocks like ```sql or explanations."
+        prompt_template = self.config.prompts.load_prompt("generator_prompt_path", default_prompt)
+        prompt = prompt_template.replace("{dialect}", dialect)\
+                                .replace("{task_description}", step.description)\
+                                .replace("{table_info}", table_info)\
+                                .replace("{previous_context_block}", prev_block)\
+                                .replace("{error_context_block}", err_block)
 
         response = self.llm.complete([Message(role="user", content=prompt)])
+        
         sql = response.strip()
         if "```sql" in sql:
             sql = sql.split("```sql")[1].split("```")[0].strip()

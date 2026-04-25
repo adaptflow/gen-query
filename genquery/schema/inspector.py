@@ -5,12 +5,21 @@ from .filters import should_include_table
 from genquery.core.context import SchemaContext, TableMetadata, ColumnMetadata, IndexMetadata
 from genquery.config import GenQueryConfig
 from genquery.core.callbacks import GenQueryCallbackHandler
+from genquery.core.state import PipelineStage, PipelineState
 
-class SchemaInspector:
+class SchemaInspectorStage(PipelineStage):
     def __init__(self, engine: Engine, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
         self.config = config
         self.engine = engine
         self.callbacks = callbacks or GenQueryCallbackHandler()
+
+    def run(self, state: PipelineState) -> PipelineState:
+        if state.schema_context is not None:
+            # Skip if schema context was already provided by developer
+            return state
+            
+        state.schema_context = self.get_schema()
+        return state
 
     def get_schema(self) -> SchemaContext:
         self.callbacks.on_inspector_start()
