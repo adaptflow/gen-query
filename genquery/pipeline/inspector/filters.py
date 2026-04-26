@@ -2,6 +2,9 @@ import re
 from genquery.config import TableFilterConfig
 
 def should_include_table(table_name: str, config: TableFilterConfig) -> bool:
+    """
+    Determine if a table should be included in the schema context based on filter configuration.
+    """
     if config.exclude and table_name in config.exclude:
         return False
     

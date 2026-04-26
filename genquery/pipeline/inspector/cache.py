@@ -7,6 +7,7 @@ from genquery.core.models import SchemaContext
 from genquery.config import GenQueryConfig
 
 class SchemaCache:
+    """Manages file-based caching for schema metadata."""
     def __init__(self, config: GenQueryConfig):
         self.config = config
         self.cache_dir = config.schema_cache_dir

@@ -4,6 +4,7 @@ from typing import List, Optional, Pattern
 import os
 
 class TableFilterConfig(BaseModel):
+    """Configuration for filtering which tables are included in the schema context."""
     include: Optional[List[str]] = None
     exclude: Optional[List[str]] = None
     regex: Optional[Pattern | str] = None
@@ -11,6 +12,7 @@ class TableFilterConfig(BaseModel):
     suffix: Optional[str] = None
 
 class RLSPolicy(BaseModel):
+    """Row-level security policy configuration."""
     column: str
     value: str
     session_variable: Optional[str] = None
@@ -33,6 +35,7 @@ class PromptsConfig(BaseModel):
         return default_prompt
 
 class GenQueryConfig(BaseModel):
+    """Main configuration model for GenQuery."""
     connection_string: str
     schema_name: str = "public"
     table_filters: TableFilterConfig = Field(default_factory=TableFilterConfig)
@@ -45,6 +48,9 @@ class GenQueryConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str, connection_string: Optional[str] = None, schema_name: Optional[str] = None) -> "GenQueryConfig":
+        """
+        Load configuration from a YAML file.
+        """
         if not os.path.exists(path):
             raise FileNotFoundError(f"Config file not found at: {path}")
         with open(path, 'r', encoding='utf-8') as f:

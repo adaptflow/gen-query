@@ -22,11 +22,13 @@ class SemanticRankerStage(PipelineStage):
     Determines the most relevant tables for the given NL query.
     """
     def __init__(self, llm: LLMAdapter, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
+        """Initialize the semantic ranker stage."""
         self.llm = llm
         self.config = config
         self.callbacks = callbacks or GenQueryCallbackHandler()
 
     def run(self, state: PipelineState) -> PipelineState:
+        """Run the ranker stage to filter and rank schema tables."""
         self.callbacks.on_ranker_start(state.query)
         
         schema = state.schema_context
@@ -43,6 +45,7 @@ class SemanticRankerStage(PipelineStage):
         return state
 
     def rank(self, schema: SchemaContext, query: str, top_k: int = 5) -> SchemaContext:
+        """Rank and return the top-k most relevant tables from the schema for the given query."""
         if len(schema.tables) <= top_k:
             return schema
 

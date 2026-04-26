@@ -24,6 +24,7 @@ Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or exp
 """
 
 class ExecutionError(Exception):
+    """Exception raised for errors during query execution."""
     pass
 
 class QueryExecutorStage(PipelineStage):
@@ -31,6 +32,7 @@ class QueryExecutorStage(PipelineStage):
     Stage 4: Query Generator + Executor Loop
     """
     def __init__(self, llm: LLMAdapter, engine: Any, validator: SecurityValidator, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
+        """Initialize the QueryExecutorStage."""
         self.llm = llm
         self.engine = engine
         self.validator = validator
@@ -40,6 +42,7 @@ class QueryExecutorStage(PipelineStage):
         self.last_generated_sql = ""
 
     def run(self, state: PipelineState) -> PipelineState:
+        """Run the execution stage to generate and execute SQL."""
         schema = state.ranked_schema or state.schema_context
         dry_run = state.context.get("dry_run", False)
         
@@ -81,6 +84,7 @@ class QueryExecutorStage(PipelineStage):
         return sql
 
     def execute_plan(self, plan: QueryPlan, schema: SchemaContext, dry_run: bool = False) -> Any:
+        """Execute the query plan and return the result DataFrame."""
         import polars as pl
         
         results_store = ResultStore()

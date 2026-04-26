@@ -38,11 +38,13 @@ class QueryPlannerStage(PipelineStage):
     Stage 3: Query Planner (Agentic).
     """
     def __init__(self, llm: LLMAdapter, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
+        """Initialize the query planner stage."""
         self.llm = llm
         self.config = config
         self.callbacks = callbacks or GenQueryCallbackHandler()
 
     def run(self, state: PipelineState) -> PipelineState:
+        """Run the planner stage to generate a query execution plan."""
         self.callbacks.on_planner_start(state.query)
         schema = state.ranked_schema or state.schema_context
         
@@ -53,6 +55,7 @@ class QueryPlannerStage(PipelineStage):
         return state
 
     def plan(self, query: str, schema: SchemaContext) -> QueryPlan:
+        """Generate a query plan using the LLM based on the query and schema."""
         table_info = ""
         dialect = "generic"
         

@@ -5,6 +5,7 @@ class SecurityValidator:
     Validates that a SQL query is strictly read-only (SELECT).
     """
     def __init__(self, dialect: str):
+        """Initialize the validator for a specific SQL dialect."""
         self.dialect = dialect
 
     def validate(self, sql: str) -> bool:

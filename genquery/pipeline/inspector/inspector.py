@@ -11,6 +11,9 @@ from genquery.pipeline.inspector.cache import SchemaCache
 import threading
 
 class SchemaInspectorStage(PipelineStage):
+    """
+    Stage 1: Extract and cache the database schema.
+    """
     def __init__(self, engine: Engine, config: GenQueryConfig, callbacks: Optional[GenQueryCallbackHandler] = None):
         self.config = config
         self.engine = engine

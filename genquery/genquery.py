@@ -13,6 +13,12 @@ from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.core.utils import get_dialect
 
 class GenQuery:
+    """
+    Main orchestrator class for the GenQuery system.
+
+    Provides a facade for initializing the pipeline and executing natural
+    language queries against a database using LLM adapters.
+    """
     def __init__(
         self, 
         llm: LLMAdapter, 
@@ -23,6 +29,18 @@ class GenQuery:
         callbacks: Optional[GenQueryCallbackHandler] = None,
         custom_stages: Optional[List[PipelineStage]] = None
     ):
+        """
+        Initialize the GenQuery orchestrator.
+
+        Args:
+            llm: The LLMAdapter instance to use for generation.
+            connection_string: The database connection string.
+            schema: The database schema to use (default "public").
+            table_filter: Optional configuration to filter tables.
+            config_path: Optional path to a YAML configuration file.
+            callbacks: Optional callback handler for pipeline events.
+            custom_stages: Optional list of custom pipeline stages to use instead of the default.
+        """
         if config_path:
             self.config = GenQueryConfig.from_yaml(config_path, connection_string=connection_string, schema_name=schema)
         else:

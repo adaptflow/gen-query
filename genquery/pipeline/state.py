@@ -3,6 +3,9 @@ from typing import Any, Dict, Optional, List
 from genquery.core.models import SchemaContext, QueryPlan
 
 class PipelineState(BaseModel):
+    """
+    Holds the state of the query generation pipeline.
+    """
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
     query: str
@@ -20,4 +23,7 @@ class PipelineStage:
     Abstract base class for a pipeline stage.
     """
     def run(self, state: PipelineState) -> PipelineState:
+        """
+        Executes the logic of this stage and returns the updated state.
+        """
         raise NotImplementedError("PipelineStage must implement the 'run' method.")

@@ -2,6 +2,7 @@ from typing import Any, List, Optional
 from genquery.pipeline.state import PipelineState, PipelineStage
 
 class QueryResult:
+    """Represents the final result of a GenQuery execution."""
     def __init__(self, sql: Optional[str], plan: Any, steps: Any, df: Any = None):
         self.sql = sql
         self.plan = plan
@@ -14,9 +15,15 @@ class GenQueryPipeline:
     Executes a list of PipelineStages sequentially.
     """
     def __init__(self, stages: Optional[List[PipelineStage]] = None):
+        """
+        Initialize the pipeline with an optional list of stages.
+        """
         self.stages = stages or []
         
     def add_stage(self, stage: PipelineStage):
+        """
+        Appends a stage to the end of the pipeline.
+        """
         self.stages.append(stage)
 
     def replace_stage(self, target_class: type, new_stage: PipelineStage) -> bool:
@@ -42,6 +49,9 @@ class GenQueryPipeline:
         return False
 
     def execute(self, state: PipelineState) -> QueryResult:
+        """
+        Executes all stages in the pipeline sequentially.
+        """
         for stage in self.stages:
             state = stage.run(state)
             
