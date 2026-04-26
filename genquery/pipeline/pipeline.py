@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from genquery.core.state import PipelineState, PipelineStage
+from genquery.pipeline.state import PipelineState, PipelineStage
 
 class QueryResult:
     def __init__(self, sql: Optional[str], plan: Any, steps: Any, df: Any = None):

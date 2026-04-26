@@ -1,7 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Optional, List
-from genquery.core.context import SchemaContext
-from genquery.planner.plan_models import QueryPlan
+from genquery.core.models import SchemaContext, QueryPlan
 
 class PipelineState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)

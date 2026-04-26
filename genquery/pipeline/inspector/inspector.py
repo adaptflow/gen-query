@@ -2,12 +2,12 @@ from genquery.core.utils import get_dialect
 from sqlalchemy import Engine
 from sqlalchemy import inspect
 from typing import List, Optional
-from genquery.schema.filters import should_include_table
-from genquery.core.context import SchemaContext, TableMetadata, ColumnMetadata, IndexMetadata
+from genquery.pipeline.inspector.filters import should_include_table
+from genquery.core.models import SchemaContext, TableMetadata, ColumnMetadata, IndexMetadata
 from genquery.config import GenQueryConfig
 from genquery.core.callbacks import GenQueryCallbackHandler
-from genquery.core.state import PipelineStage, PipelineState
-from genquery.schema.cache import SchemaCache
+from genquery.pipeline.state import PipelineStage, PipelineState
+from genquery.pipeline.inspector.cache import SchemaCache
 import threading
 
 class SchemaInspectorStage(PipelineStage):

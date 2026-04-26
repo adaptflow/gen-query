@@ -2,14 +2,13 @@ import sys
 from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from genquery.adapters.base import LLMAdapter, Message
-from genquery.core.context import SchemaContext
-from genquery.planner.plan_models import QueryPlan, PlanStep
-from genquery.executor.validator import SecurityValidator
-from genquery.executor.result_store import ResultStore
+from genquery.core.models import SchemaContext, QueryPlan, PlanStep
+from genquery.pipeline.executor.validator import SecurityValidator
+from genquery.pipeline.executor.result_store import ResultStore
 from genquery.core.callbacks import GenQueryCallbackHandler
-from genquery.core.state import PipelineStage, PipelineState
+from genquery.pipeline.state import PipelineStage, PipelineState
 from genquery.config import GenQueryConfig
-from genquery.executor.modifier import apply_security_and_limits
+from genquery.pipeline.executor.modifier import apply_security_and_limits
 
 
 GENERATOR_DEFAULT_PROMPT = """

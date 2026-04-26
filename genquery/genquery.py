@@ -2,13 +2,13 @@ from typing import Any, Optional, Dict, List
 from sqlalchemy import create_engine
 from genquery.adapters.base import LLMAdapter
 from genquery.config import GenQueryConfig, TableFilterConfig
-from genquery.core.pipeline import GenQueryPipeline, QueryResult
-from genquery.core.state import PipelineState, PipelineStage
-from genquery.schema.inspector import SchemaInspectorStage
-from genquery.schema.ranker import SemanticRankerStage
-from genquery.planner.planner import QueryPlannerStage
-from genquery.executor.executor import QueryExecutorStage
-from genquery.executor.validator import SecurityValidator
+from genquery.pipeline.pipeline import GenQueryPipeline, QueryResult
+from genquery.pipeline.state import PipelineState, PipelineStage
+from genquery.pipeline.inspector.inspector import SchemaInspectorStage
+from genquery.pipeline.ranker.ranker import SemanticRankerStage
+from genquery.pipeline.planner.planner import QueryPlannerStage
+from genquery.pipeline.executor.executor import QueryExecutorStage
+from genquery.pipeline.executor.validator import SecurityValidator
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.core.utils import get_dialect
 

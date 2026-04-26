@@ -1,8 +1,8 @@
 import json
 from typing import List, Optional
 from genquery.adapters.base import LLMAdapter, Message
-from genquery.core.context import SchemaContext, TableMetadata
-from genquery.core.state import PipelineStage, PipelineState
+from genquery.core.models import SchemaContext, TableMetadata
+from genquery.pipeline.state import PipelineStage, PipelineState
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.config import GenQueryConfig
 

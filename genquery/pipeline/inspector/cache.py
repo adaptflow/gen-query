@@ -3,7 +3,7 @@ import json
 import time
 import hashlib
 from typing import Optional
-from genquery.core.context import SchemaContext
+from genquery.core.models import SchemaContext
 from genquery.config import GenQueryConfig
 
 class SchemaCache:
