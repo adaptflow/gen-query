@@ -22,6 +22,7 @@ class GenQuery:
     def __init__(
         self, 
         llm: LLMAdapter, 
+        config: Optional[GenQueryConfig] = None,
         connection_string: Optional[str] = None, 
         schema: str = "public", 
         table_filter: Optional[Dict[str, Any]] = None,
@@ -34,6 +35,7 @@ class GenQuery:
 
         Args:
             llm: The LLMAdapter instance to use for generation.
+            config: A pre-configured GenQueryConfig object (takes precedence over other params).
             connection_string: The database connection string.
             schema: The database schema to use (default "public").
             table_filter: Optional configuration to filter tables.
@@ -41,8 +43,18 @@ class GenQuery:
             callbacks: Optional callback handler for pipeline events.
             custom_stages: Optional list of custom pipeline stages to use instead of the default.
         """
-        if config_path:
-            self.config = GenQueryConfig.from_yaml(config_path, connection_string=connection_string, schema_name=schema)
+        # Configuration resolution priority:
+        # 1. Direct GenQueryConfig object
+        # 2. YAML config file
+        # 3. Individual parameters
+        if config is not None:
+            self.config = config
+        elif config_path:
+            self.config = GenQueryConfig.from_yaml(
+                config_path, 
+                connection_string=connection_string, 
+                schema_name=schema
+            )
         else:
             filter_config = TableFilterConfig(**table_filter) if table_filter else TableFilterConfig()
             self.config = GenQueryConfig(
@@ -52,10 +64,11 @@ class GenQuery:
             )
         self.llm = llm
         self.callbacks = callbacks or GenQueryCallbackHandler()
+        
         # Connect to engine
         connect_args = {}
         # Only postgres accepts -csearch_path
-        if self.config.connection_string.startswith("postgre"):
+        if self.config.connection_string and self.config.connection_string.startswith("postgre"):
             connect_args['options'] = f'-csearch_path={self.config.schema_name}'
             
         self.engine = create_engine(self.config.connection_string, connect_args=connect_args)
