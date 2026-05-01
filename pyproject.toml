@@ -15,5 +15,6 @@ dependencies = [
     "polars>=0.20.0",
     "connectorx>=0.3.0",
     "openai>=1.0.0",
-    "psycopg2>=2.9.10"
+    "psycopg2>=2.9.10",
+    "mysqlclient>=2.2.8"
 ]

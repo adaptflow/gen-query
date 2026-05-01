@@ -21,10 +21,10 @@ class GenQuery:
     """
     def __init__(
         self, 
-        llm: LLMAdapter, 
-        config: Optional[GenQueryConfig] = None,
-        connection_string: Optional[str] = None, 
+        llm: LLMAdapter,
+        connection_string: Optional[str] = None,
         schema: str = "public", 
+        config: Optional[GenQueryConfig] = None,
         table_filter: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
         callbacks: Optional[GenQueryCallbackHandler] = None,
