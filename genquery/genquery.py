@@ -1,5 +1,5 @@
 from typing import Any, Optional, Dict, List
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from genquery.adapters.base import LLMAdapter
 from genquery.config import GenQueryConfig, TableFilterConfig
 from genquery.pipeline.pipeline import GenQueryPipeline, QueryResult
@@ -73,6 +73,15 @@ class GenQuery:
             
         self.engine = create_engine(self.config.connection_string, connect_args=connect_args)
         dialect_name = get_dialect(self.engine)
+
+        # For Oracle: set the current schema on every connection so unqualified table names resolve correctly
+        if dialect_name == "oracle" and self.config.schema_name:
+            @event.listens_for(self.engine, "connect", insert=True)
+            def set_oracle_schema(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute(f'ALTER SESSION SET CURRENT_SCHEMA = "{self.config.schema_name}"')
+                cursor.close()
+
         self.validator = SecurityValidator(dialect=dialect_name)
 
         if custom_stages is not None:

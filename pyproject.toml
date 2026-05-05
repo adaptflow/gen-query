@@ -16,5 +16,6 @@ dependencies = [
     "connectorx>=0.3.0",
     "openai>=1.0.0",
     "psycopg2>=2.9.10",
-    "mysqlclient>=2.2.8"
+    "mysqlclient>=2.2.8",
+    "oracledb>=3.4.2"
 ]
