@@ -6,7 +6,10 @@ class SecurityValidator:
     """
     def __init__(self, dialect: str):
         """Initialize the validator for a specific SQL dialect."""
-        self.dialect = dialect
+        if dialect == 'mssql':
+            self.dialect = 'tsql'
+        else:
+            self.dialect = dialect
 
     def validate(self, sql: str) -> bool:
         """
@@ -29,6 +32,7 @@ class SecurityValidator:
                 # Advanced checking could walk the AST to ensure no destructive subqueries,
                 # but typically sqlglot's parser distinguishes query types well.
             return True
-        except Exception:
+        except Exception as e:
             # If it fails to parse, it's safer to consider it invalid.
+            print(f"Error occurred while validating SQL: {e}")
             return False

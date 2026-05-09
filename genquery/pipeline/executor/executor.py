@@ -60,8 +60,9 @@ class QueryExecutorStage(PipelineStage):
         dialect = "generic"
         if schema:
             dialect = schema.dialect
+            schema_prefix = f"{self.config.schema_name}." if self.config.schema_name and dialect == "mssql" else ""
             for t in schema.tables:
-                table_info += f"Table: {t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
+                table_info += f"Table: {schema_prefix}{t.name}\nColumns: {', '.join(c.name for c in t.columns)}\n\n"
 
         prev_block = f"\nPrevious Step Results Context:\n{previous_results}\n" if previous_results else ""
         err_block = f"\nWarning! The previous query failed with this error. Please correct your SQL:\n{error_context}\n" if error_context else ""
@@ -117,7 +118,7 @@ class QueryExecutorStage(PipelineStage):
                         # AST modification
                         sql = apply_security_and_limits(
                             sql, 
-                            schema.dialect if schema else "generic", 
+                            'tsql' if schema.dialect == "mssql" else schema.dialect, 
                             limit=self.config.row_limit,
                             rls_policies=self.config.rls_policies if schema.dialect != "postgres" else None,
                             schema=schema
@@ -139,6 +140,13 @@ class QueryExecutorStage(PipelineStage):
                             conn.execute(text(f"SET statement_timeout = {self.config.statement_timeout_ms}"))
                         elif schema.dialect == "mysql":
                             conn.execute(text(f"SET SESSION MAX_EXECUTION_TIME = {self.config.statement_timeout_ms}"))
+                        elif schema.dialect == "mssql":
+                            conn.execute(text(f"SET LOCK_TIMEOUT {self.config.statement_timeout_ms}"))
+                        elif schema.dialect == "oracle":
+                            # Oracle doesn't have a simple session-level statement timeout SET command.
+                            # The closest is using Resource Manager or application-level timeout.
+                            # If you need it, consider using Oracle's DBMS_SESSION or connection properties.
+                            pass
                             
                         df = pl.read_database(query=query_to_run, connection=conn)
                         result_df = df
