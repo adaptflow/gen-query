@@ -23,8 +23,9 @@ class GenQuery:
         self, 
         llm: LLMAdapter,
         connection_string: Optional[str] = None,
-        schema: str = "public", 
+        schema: str = "public",
         config: Optional[GenQueryConfig] = None,
+        connect_args: Optional[Dict[str, Any]] = None,
         table_filter: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
         callbacks: Optional[GenQueryCallbackHandler] = None,
@@ -35,9 +36,10 @@ class GenQuery:
 
         Args:
             llm: The LLMAdapter instance to use for generation.
-            config: A pre-configured GenQueryConfig object (takes precedence over other params).
             connection_string: The database connection string.
             schema: The database schema to use (default "public").
+            config: A pre-configured GenQueryConfig object (takes precedence over other params).
+            connect_args: Optional dictionary of keyword arguments to pass to the SQLAlchemy create_engine call.
             table_filter: Optional configuration to filter tables.
             config_path: Optional path to a YAML configuration file.
             callbacks: Optional callback handler for pipeline events.
@@ -49,29 +51,37 @@ class GenQuery:
         # 3. Individual parameters
         if config is not None:
             self.config = config
+            if connect_args:
+                self.config.connect_args = {**self.config.connect_args, **connect_args}
         elif config_path:
             self.config = GenQueryConfig.from_yaml(
-                config_path, 
-                connection_string=connection_string, 
-                schema_name=schema
+                config_path,
+                connection_string=connection_string,
+                schema_name=schema,
+                connect_args=connect_args
             )
         else:
             filter_config = TableFilterConfig(**table_filter) if table_filter else TableFilterConfig()
             self.config = GenQueryConfig(
                 connection_string=connection_string,
                 schema_name=schema,
+                connect_args=connect_args or {},
                 table_filters=filter_config
             )
         self.llm = llm
         self.callbacks = callbacks or GenQueryCallbackHandler()
         
         # Connect to engine
-        connect_args = {}
+        engine_connect_args = self.config.connect_args.copy()
+
         # Only postgres accepts -csearch_path
         if self.config.connection_string and self.config.connection_string.startswith("postgre"):
-            connect_args['options'] = f'-csearch_path={self.config.schema_name}'
-            
-        self.engine = create_engine(self.config.connection_string, connect_args=connect_args)
+            if 'options' not in engine_connect_args:
+                engine_connect_args['options'] = f'-csearch_path={self.config.schema_name}'
+            elif '-csearch_path' not in engine_connect_args['options']:
+                engine_connect_args['options'] += f' -csearch_path={self.config.schema_name}'
+
+        self.engine = create_engine(self.config.connection_string, connect_args=engine_connect_args)
         dialect_name = get_dialect(self.engine)
 
         # For Oracle: set the current schema on every connection so unqualified table names resolve correctly

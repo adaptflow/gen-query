@@ -1,6 +1,6 @@
 import yaml
 from pydantic import BaseModel, Field
-from typing import List, Optional, Pattern
+from typing import List, Optional, Pattern, Dict, Any
 import os
 
 class TableFilterConfig(BaseModel):
@@ -38,6 +38,7 @@ class GenQueryConfig(BaseModel):
     """Main configuration model for GenQuery."""
     connection_string: str
     schema_name: str = "public"
+    connect_args: Dict[str, Any] = Field(default_factory=dict)
     table_filters: TableFilterConfig = Field(default_factory=TableFilterConfig)
     prompts: PromptsConfig = Field(default_factory=PromptsConfig)
     rls_policies: List[RLSPolicy] = Field(default_factory=list)
@@ -47,7 +48,7 @@ class GenQueryConfig(BaseModel):
     row_limit: int = 1000
 
     @classmethod
-    def from_yaml(cls, path: str, connection_string: Optional[str] = None, schema_name: Optional[str] = None) -> "GenQueryConfig":
+    def from_yaml(cls, path: str, connection_string: Optional[str] = None, schema_name: Optional[str] = None, connect_args: Optional[Dict[str, Any]] = None) -> "GenQueryConfig":
         """
         Load configuration from a YAML file.
         """
@@ -63,4 +64,6 @@ class GenQueryConfig(BaseModel):
             raise ValueError("connection_string must be provided if config_path is not specified")
         if schema_name:
             data['schema_name'] = schema_name
+        if connect_args:
+            data['connect_args'] = {**data.get('connect_args', {}), **connect_args}
         return cls(**data)

@@ -37,12 +37,32 @@ from genquery.adapters.openai_adapter import OpenAIAdapter
 # 1. Initialize your LLM adapter
 llm = OpenAIAdapter(api_key="sk-...", model="gpt-5.5")
 
-# 2. Setup GenQuery
+
+# 2. Setup GenQuery (multiple configuration options)
+
+# Option A: Simple setup with individual parameters
 gq = GenQuery(
     llm=llm,
     connection_string="postgresql://user:pass@localhost:5432/mydb",
     schema="public"
 )
+
+# Option B: Using a pre-configured GenQueryConfig object
+from genquery.config import GenQueryConfig, TableFilterConfig, RLSPolicy
+
+config = GenQueryConfig(
+    connection_string="postgresql://user:pass@localhost:5432/mydb",
+    schema_name="public",
+    connect_args={"connect_timeout": 10},
+    table_filters=TableFilterConfig(exclude=["migrations", "audit_logs"]),
+    statement_timeout_ms=10000,
+    row_limit=100,
+    rls_policies=[RLSPolicy(column="tenant_id", value="t-12345")]
+)
+gq = GenQuery(llm=llm, config=config)
+
+# Option C: Using a YAML configuration file
+gq = GenQuery(llm=llm, config_path="config.yaml")
 
 # 3. Run a query!
 df = gq.run("Show me the top 5 customers by total order amount this year")
@@ -66,8 +86,13 @@ GenQuery includes out-of-the-box adapters for popular models:
 
 You can configure GenQuery via code or a YAML file to enforce table filters, row limits, statement timeouts, and Row-Level Security (RLS).
 
+### Read-Only Enforcement
+All generated SQL is validated using AST parsing to ensure it contains only `SELECT` statements. `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, and other destructive operations are rejected.
+
 ### Row-Level Security (RLS)
-The executor can parse the generated AST and inject `WHERE` clauses for specific tables dynamically based on the current user or tenant context.
+The executor can parse the generated AST and inject `WHERE` clauses for specific tables dynamically based on the current user or tenant context. This works by either:
+- **AST injection**: Automatically adding filter conditions to the parsed SQL.
+- **Session variables**: Setting PostgreSQL session variables that trigger RLS policies.
 
 ```yaml
 # config.yaml
