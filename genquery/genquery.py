@@ -10,6 +10,7 @@ from genquery.pipeline.planner.planner import QueryPlannerStage
 from genquery.pipeline.executor.executor import QueryExecutorStage
 from genquery.pipeline.executor.validator import SecurityValidator
 from genquery.core.callbacks import GenQueryCallbackHandler
+from genquery.core.models import ConversationTurn
 from genquery.core.utils import get_dialect
 
 class GenQuery:
@@ -107,24 +108,40 @@ class GenQuery:
         pipeline.add_stage(QueryExecutorStage(self.llm, self.engine, self.validator, self.config, self.callbacks))
         return pipeline
 
-    def generate(self, query: str) -> QueryResult:
+    def generate(
+        self,
+        query: str,
+        conversation: Optional[List[ConversationTurn]] = None,
+    ) -> QueryResult:
         """
-        Generate the SQL and Plan without executing the final query on actual data.
-        It uses dry_run to ensure validation using EXPLAIN.
+        Generate SQL and plan for a query, optionally using previous turns as context.
         """
         state = PipelineState(
             query=query, 
+            conversation=conversation or [],
             context={"dry_run": False}
         )
         return self.pipeline.execute(state)
 
-    def run(self, query: str) -> Any:
+    def run(
+        self,
+        query: str,
+        conversation: Optional[List[ConversationTurn]] = None,
+        return_result: bool = False,
+    ) -> Any:
         """
-        Generate SQL, plan, and execute returning the resulting DataFrame.
+        Generate SQL, plan, and execute the query.
+
+        By default this returns the resulting DataFrame.
+        Set return_result=True to receive a QueryResult containing SQL, plan, DataFrame,
+        and updated conversation history for multi-turn follow-ups.
         """
         state = PipelineState(
             query=query, 
+            conversation=conversation or [],
             context={"dry_run": False}
         )
         result = self.pipeline.execute(state)
+        if return_result:
+            return result
         return result.df

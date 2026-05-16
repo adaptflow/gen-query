@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional
 from genquery.adapters.base import LLMAdapter, Message
-from genquery.core.models import SchemaContext, TableMetadata
+from genquery.core.models import ConversationContext, ConversationTurn, SchemaContext, TableMetadata
 from genquery.pipeline.state import PipelineStage, PipelineState
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.config import GenQueryConfig
@@ -10,7 +10,14 @@ RANKER_DEFAULT_PROMPT = """
 Given the following database tables, identify the most relevant tables needed to answer the user's query.
 Return *only* a JSON array of strings containing the table names, up to {top_k} tables.
 
-User query: {query}
+Conversation context:
+{conversation_context}
+
+Current user query: {query}
+
+Important multi-turn instructions:
+- The current query may be a follow-up that references prior tables or SQL using words like "that", "those", "now", or "what about".
+- Use the conversation context to keep tables that were relevant to previous turns when the current query is ambiguous.
 
 Tables:
 {table_info}
@@ -38,13 +45,23 @@ class SemanticRankerStage(PipelineStage):
             self.callbacks.on_ranker_end(0)
             return state
             
-        ranked_schema = self.rank(schema, state.query)
+        ranked_schema = self.rank(schema, state.query, conversation=state.conversation)
         state.ranked_schema = ranked_schema
         
         self.callbacks.on_ranker_end(len(ranked_schema.tables))
         return state
 
-    def rank(self, schema: SchemaContext, query: str, top_k: int = 5) -> SchemaContext:
+    def _format_conversation(self, conversation: Optional[List[ConversationTurn]]) -> str:
+        """Format recent conversation turns for the ranker prompt."""
+        return ConversationContext(turns=conversation or []).format_for_prompt()
+
+    def rank(
+        self,
+        schema: SchemaContext,
+        query: str,
+        top_k: int = 5,
+        conversation: Optional[List[ConversationTurn]] = None,
+    ) -> SchemaContext:
         """Rank and return the top-k most relevant tables from the schema for the given query."""
         if len(schema.tables) <= top_k:
             return schema
@@ -57,7 +74,10 @@ class SemanticRankerStage(PipelineStage):
 
         # Load from config or use default
         prompt_template = self.config.prompts.load_prompt("ranker_prompt_path", RANKER_DEFAULT_PROMPT)
-        prompt = prompt_template.replace("{query}", query).replace("{table_info}", table_info).replace("{top_k}", str(top_k))
+        prompt = prompt_template.replace("{query}", query)\
+                                .replace("{table_info}", table_info)\
+                                .replace("{top_k}", str(top_k))\
+                                .replace("{conversation_context}", self._format_conversation(conversation))
 
         response = self.llm.complete([Message(role="user", content=prompt)])
         

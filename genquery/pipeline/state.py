@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Dict, Optional, List
-from genquery.core.models import SchemaContext, QueryPlan
+from genquery.core.models import SchemaContext, QueryPlan, ConversationTurn
 
 class PipelineState(BaseModel):
     """
@@ -14,6 +14,7 @@ class PipelineState(BaseModel):
     plan: Optional[QueryPlan] = None
     sql: Optional[str] = None
     df: Optional[Any] = None
+    conversation: List[ConversationTurn] = Field(default_factory=list)
     
     # Context dictionary to pass arbitrary data between custom stages
     context: Dict[str, Any] = Field(default_factory=dict)

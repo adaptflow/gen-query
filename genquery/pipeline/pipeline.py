@@ -1,13 +1,22 @@
 from typing import Any, List, Optional
+from genquery.core.models import ConversationTurn
 from genquery.pipeline.state import PipelineState, PipelineStage
 
 class QueryResult:
     """Represents the final result of a GenQuery execution."""
-    def __init__(self, sql: Optional[str], plan: Any, steps: Any, df: Any = None):
+    def __init__(
+        self,
+        sql: Optional[str],
+        plan: Any,
+        steps: Any,
+        df: Any = None,
+        conversation: Optional[List[ConversationTurn]] = None,
+    ):
         self.sql = sql
         self.plan = plan
         self.steps = steps
         self.df = df
+        self.conversation = conversation or []
 
 class GenQueryPipeline:
     """
@@ -59,5 +68,6 @@ class GenQueryPipeline:
             sql=state.sql,
             plan=state.plan,
             steps=state.plan.steps if state.plan else [],
-            df=state.df
+            df=state.df,
+            conversation=state.conversation
         )

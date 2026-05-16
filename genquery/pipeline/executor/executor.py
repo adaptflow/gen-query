@@ -2,7 +2,7 @@ import sys
 from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from genquery.adapters.base import LLMAdapter, Message
-from genquery.core.models import SchemaContext, QueryPlan, PlanStep
+from genquery.core.models import ConversationContext, ConversationTurn, SchemaContext, QueryPlan, PlanStep
 from genquery.pipeline.executor.validator import SecurityValidator
 from genquery.pipeline.executor.result_store import ResultStore
 from genquery.core.callbacks import GenQueryCallbackHandler
@@ -12,14 +12,24 @@ from genquery.pipeline.executor.modifier import apply_security_and_limits
 
 
 GENERATOR_DEFAULT_PROMPT = """
-You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {dialect} dialect for the following task:
+You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {dialect} dialect.
 
-Task: {task_description}
+Conversation context:
+{conversation_context}
+
+Current task:
+{task_description}
 
 Available Schema:
 {table_info}
 {previous_context_block}
 {error_context_block}
+Multi-turn SQL generation rules:
+- If conversation context contains previous SQL and the current task is a follow-up, modify the previous SQL.
+- Examples of follow-ups include "filter that to this year", "what about marketing?", "only active customers", "sort it by revenue", and "show the same thing for last quarter".
+- Preserve the intent of the previous SQL unless the current task clearly changes it.
+- Use only tables and columns present in the available schema.
+
 Return ONLY the raw SQL query. Do not include markdown blocks like ```sql or explanations.
 """
 
@@ -49,13 +59,49 @@ class QueryExecutorStage(PipelineStage):
         if not state.plan:
             raise ExecutionError("QueryPlan is required for QueryExecutorStage")
             
-        final_result = self.execute_plan(state.plan, schema, dry_run=dry_run)
+        conversation_context = self._format_conversation(state.conversation)
+        final_result = self.execute_plan(
+            state.plan,
+            schema,
+            dry_run=dry_run,
+            conversation_context=conversation_context,
+        )
         
         state.sql = self.last_generated_sql
         state.df = final_result
+        state.conversation.append(
+            ConversationTurn(
+                user_query=state.query,
+                sql=state.sql,
+                plan=state.plan.model_dump() if state.plan else None,
+                result_summary=self._summarize_result(final_result),
+            )
+        )
         return state
 
-    def _generate_sql(self, step: PlanStep, schema: SchemaContext, error_context: str = "", previous_results: str = "") -> str:
+    def _format_conversation(self, conversation: Optional[List[ConversationTurn]]) -> str:
+        """Format recent conversation turns for SQL generation prompts."""
+        return ConversationContext(turns=conversation or []).format_for_prompt()
+
+    def _summarize_result(self, result: Any) -> Optional[str]:
+        """Create a compact, prompt-safe summary of a result DataFrame."""
+        if result is None:
+            return None
+
+        try:
+            columns = ", ".join(result.columns)
+            return f"Rows: {len(result)}; Columns: {columns}"
+        except Exception:
+            return None
+
+    def _generate_sql(
+        self,
+        step: PlanStep,
+        schema: SchemaContext,
+        error_context: str = "",
+        previous_results: str = "",
+        conversation_context: str = "",
+    ) -> str:
         table_info = ""
         dialect = "generic"
         if schema:
@@ -72,7 +118,8 @@ class QueryExecutorStage(PipelineStage):
                                 .replace("{task_description}", step.description)\
                                 .replace("{table_info}", table_info)\
                                 .replace("{previous_context_block}", prev_block)\
-                                .replace("{error_context_block}", err_block)
+                                .replace("{error_context_block}", err_block)\
+                                .replace("{conversation_context}", conversation_context or "No previous conversation.")
 
         response = self.llm.complete([Message(role="user", content=prompt)])
         
@@ -84,7 +131,13 @@ class QueryExecutorStage(PipelineStage):
         sql = sql.replace("\n", " ")
         return sql
 
-    def execute_plan(self, plan: QueryPlan, schema: SchemaContext, dry_run: bool = False) -> Any:
+    def execute_plan(
+        self,
+        plan: QueryPlan,
+        schema: SchemaContext,
+        dry_run: bool = False,
+        conversation_context: str = "",
+    ) -> Any:
         """Execute the query plan and return the result DataFrame."""
         import polars as pl
         
@@ -102,7 +155,13 @@ class QueryExecutorStage(PipelineStage):
 
             for attempt in range(self.max_retries):
                 # 1. Generate
-                sql = self._generate_sql(step, schema, error_context, previous_results=prev_context)
+                sql = self._generate_sql(
+                    step,
+                    schema,
+                    error_context,
+                    previous_results=prev_context,
+                    conversation_context=conversation_context,
+                )
                 self.callbacks.on_sql_generated(step.id, sql)
                 self.last_generated_sql = sql
 
