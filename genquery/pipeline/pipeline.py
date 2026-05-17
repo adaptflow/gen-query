@@ -14,12 +14,14 @@ class QueryResult:
         plan: Any,
         steps: Any,
         df: Any = None,
+        stream: Any = None,
         conversation: Optional[List[ConversationTurn]] = None,
     ):
         self.sql = sql
         self.plan = plan
         self.steps = steps
         self.df = df
+        self.stream = stream
         self.conversation = conversation or []
 
 
@@ -30,6 +32,7 @@ def build_query_result(state: PipelineState) -> QueryResult:
         plan=state.plan,
         steps=state.plan.steps if state.plan else [],
         df=state.df,
+        stream=state.stream,
         conversation=state.conversation
     )
 

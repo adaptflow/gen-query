@@ -14,6 +14,7 @@ class PipelineState(BaseModel):
     plan: Optional[QueryPlan] = None
     sql: Optional[str] = None
     df: Optional[Any] = None
+    stream: Optional[Any] = None
     conversation: List[ConversationTurn] = Field(default_factory=list)
     
     # Context dictionary to pass arbitrary data between custom stages

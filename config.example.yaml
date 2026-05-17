@@ -29,6 +29,11 @@ prompts:
 statement_timeout_ms: 15000
 row_limit: 1000
 
+# Streaming execution
+# Used by GenQuery.stream(...) / AsyncGenQuery.stream(...).
+# Streaming returns the final result as Polars DataFrame batches and still respects row_limit.
+stream_batch_size: 10000
+
 # Cache configurations
 schema_cache_ttl_seconds: 3600
 schema_cache_dir: ".gq_cache"

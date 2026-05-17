@@ -1,13 +1,14 @@
 # GenQuery
 
-GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as DataFrames.
+GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as DataFrames or streaming Polars batches.
 
 ## Key Features
 
 - **Agentic Pipeline**: Broken down into discrete, customizable stages (Inspector, Ranker, Planner, Executor).
 - **Multi-LLM Support**: Built-in adapters for OpenAI, Anthropic, Gemini, LangChain, and Ollama local models.
 - **Security-First**: Enforces strictly read-only (`SELECT`) queries via AST validation and injects Row-Level Security (RLS) policies dynamically.
-- **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, and schema caching.
+- **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, schema caching, and final-result streaming.
+- **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full result in memory.
 - **Customizable**: Swap out any pipeline stage to fit your specific needs or integrate with your own systems.
 
 ## Architecture
@@ -16,7 +17,7 @@ The system operates on a 4-stage pipeline by default:
 1. **Schema Inspector**: Connects to the database via SQLAlchemy, extracts schema metadata, and caches it.
 2. **Semantic Ranker**: Uses an LLM to identify and rank only the relevant tables for the user's query, reducing context overhead.
 3. **Query Planner**: Breaks the natural language request down into a logical execution plan (single step, sequential, etc.).
-4. **Query Executor**: Generates SQL for each step in the plan, applies AST-based security limits and validations, executes the queries safely, and returns a Polars DataFrame.
+4. **Query Executor**: Generates SQL for each step in the plan, applies AST-based security limits and validations, executes the queries safely, and returns a Polars DataFrame or a final-result stream of Polars DataFrame batches.
 
 ## Installation
 
@@ -57,6 +58,7 @@ config = GenQueryConfig(
     table_filters=TableFilterConfig(exclude=["migrations", "audit_logs"]),
     statement_timeout_ms=10000,
     row_limit=100,
+    stream_batch_size=10000,
     rls_policies=[RLSPolicy(column="tenant_id", value="t-12345")]
 )
 gq = GenQuery(llm=llm, config=config)
@@ -68,6 +70,45 @@ gq = GenQuery(llm=llm, config_path="config.yaml")
 df = gq.run("Show me the top 5 customers by total order amount this year")
 print(df)
 ```
+
+## Streaming Results
+
+Use `stream()` when the final result may be large. Streaming is final-result-only in v1: intermediate steps in multi-step plans are still materialized so later steps can use them as context, while the final step is yielded incrementally.
+
+The stream yields Polars DataFrame batches and respects the configured `row_limit`. Configure the default batch size with `stream_batch_size`, or override it per call with `batch_size`.
+
+```python
+result = gq.stream("Show all orders from this year", batch_size=5000)
+
+print(result.sql)
+
+with result.stream as batches:
+    for batch in batches:
+        # batch is a Polars DataFrame
+        print(batch)
+```
+
+Async streaming is also supported:
+
+```python
+from genquery import AsyncGenQuery
+from genquery.adapters.openai_adapter import AsyncOpenAIAdapter
+
+llm = AsyncOpenAIAdapter(api_key="sk-...", model="gpt-5.5")
+
+async with AsyncGenQuery(
+    llm=llm,
+    connection_string="postgresql+asyncpg://user:pass@localhost:5432/mydb",
+    schema="public",
+) as gq:
+    result = await gq.stream("Show all orders from this year", batch_size=5000)
+
+    async with result.stream as batches:
+        async for batch in batches:
+            print(batch)
+```
+
+Empty result sets yield one empty Polars DataFrame with the result columns. If you may stop iteration early, use the stream as a context manager so the database connection is closed promptly.
 
 ## Supported LLMs
 
@@ -100,6 +141,7 @@ connection_string: "postgresql://..."
 schema_name: "public"
 statement_timeout_ms: 10000
 row_limit: 100
+stream_batch_size: 10000
 rls_policies:
   - column: "tenant_id"
     value: "t-12345"

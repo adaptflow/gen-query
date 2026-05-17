@@ -41,13 +41,16 @@ def format_conversation(conversation: Optional[List[ConversationTurn]]) -> str:
 
 
 def summarize_result(result: Any) -> Optional[str]:
-    """Create a compact, prompt-safe summary of a result DataFrame."""
+    """Create a compact, prompt-safe summary of a result DataFrame or stream."""
     if result is None:
         return None
 
     try:
         columns = ", ".join(result.columns)
-        return f"Rows: {len(result)}; Columns: {columns}"
+        try:
+            return f"Rows: {len(result)}; Columns: {columns}"
+        except Exception:
+            return f"Streaming result; Columns: {columns}"
     except Exception:
         return None
 
@@ -118,6 +121,163 @@ class ExecutionError(Exception):
     pass
 
 
+class PolarsBatchStream:
+    """Context-managed iterator that yields Polars DataFrames in batches."""
+    def __init__(self, engine: Any, query: str, schema: SchemaContext, config: GenQueryConfig, step_id: str, batch_size: int, callbacks: GenQueryCallbackHandler):
+        self.engine = engine
+        self.query = query
+        self.schema = schema
+        self.config = config
+        self.step_id = step_id
+        self.batch_size = batch_size
+        self.callbacks = callbacks
+        self.columns: List[str] = []
+        self._conn = None
+        self._result = None
+        self._rows_yielded = 0
+        self._yielded_any_batch = False
+        self._closed = False
+
+    def open(self) -> "PolarsBatchStream":
+        try:
+            self._conn = self.engine.connect().execution_options(stream_results=True, yield_per=self.batch_size)
+            if self.config.rls_policies and self.schema.dialect == "postgres":
+                for policy in self.config.rls_policies:
+                    if policy.session_variable:
+                        self._conn.execute(text(f"SET LOCAL {policy.session_variable} = '{policy.value}'"))
+            timeout_statement = build_timeout_statement(self.schema.dialect, self.config.statement_timeout_ms)
+            if timeout_statement:
+                self._conn.execute(text(timeout_statement))
+            self._result = self._conn.execute(text(self.query))
+            self.columns = list(self._result.keys())
+            return self
+        except Exception:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self._result is not None:
+                self._result.close()
+        finally:
+            if self._conn is not None:
+                self._conn.close()
+
+    def __enter__(self) -> "PolarsBatchStream":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.close()
+
+    def __iter__(self) -> "PolarsBatchStream":
+        return self
+
+    def __next__(self) -> Any:
+        import polars as pl
+        if self._closed:
+            raise StopIteration
+        try:
+            rows = [dict(row) for row in self._result.mappings().fetchmany(self.batch_size)]
+            if rows:
+                self._yielded_any_batch = True
+                self._rows_yielded += len(rows)
+                return pl.DataFrame(rows)
+            if not self._yielded_any_batch:
+                self._yielded_any_batch = True
+                return pl.DataFrame({column: [] for column in self.columns})
+            self.callbacks.on_execution_success(self.step_id, self._rows_yielded)
+            self.close()
+            raise StopIteration
+        except StopIteration:
+            raise
+        except Exception:
+            self.close()
+            raise
+
+
+class AsyncPolarsBatchStream:
+    """Async context-managed iterator that yields Polars DataFrames in batches."""
+    def __init__(self, engine: Any, query: str, schema: SchemaContext, config: GenQueryConfig, step_id: str, batch_size: int, callbacks: AsyncGenQueryCallbackHandler):
+        self.engine = engine
+        self.query = query
+        self.schema = schema
+        self.config = config
+        self.step_id = step_id
+        self.batch_size = batch_size
+        self.callbacks = callbacks
+        self.columns: List[str] = []
+        self._conn = None
+        self._result = None
+        self._mapping_result = None
+        self._rows_yielded = 0
+        self._yielded_any_batch = False
+        self._closed = False
+
+    async def open(self) -> "AsyncPolarsBatchStream":
+        try:
+            self._conn = await self.engine.connect()
+            self._conn = await self._conn.execution_options(stream_results=True, yield_per=self.batch_size)
+            if self.config.rls_policies and self.schema.dialect == "postgres":
+                for policy in self.config.rls_policies:
+                    if policy.session_variable:
+                        await self._conn.execute(text(f"SET LOCAL {policy.session_variable} = '{policy.value}'"))
+            timeout_statement = build_timeout_statement(self.schema.dialect, self.config.statement_timeout_ms)
+            if timeout_statement:
+                await self._conn.execute(text(timeout_statement))
+            self._result = await self._conn.stream(text(self.query))
+            self._mapping_result = self._result.mappings()
+            self.columns = list(self._result.keys())
+            return self
+        except Exception:
+            await self.aclose()
+            raise
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self._result is not None:
+                await self._result.close()
+        finally:
+            if self._conn is not None:
+                await self._conn.close()
+
+    async def __aenter__(self) -> "AsyncPolarsBatchStream":
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.aclose()
+
+    def __aiter__(self) -> "AsyncPolarsBatchStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        import polars as pl
+        if self._closed:
+            raise StopAsyncIteration
+        try:
+            rows = [dict(row) for row in await self._mapping_result.fetchmany(self.batch_size)]
+            if rows:
+                self._yielded_any_batch = True
+                self._rows_yielded += len(rows)
+                return pl.DataFrame(rows)
+            if not self._yielded_any_batch:
+                self._yielded_any_batch = True
+                return pl.DataFrame({column: [] for column in self.columns})
+            await self.callbacks.aon_execution_success(self.step_id, self._rows_yielded)
+            await self.aclose()
+            raise StopAsyncIteration
+        except StopAsyncIteration:
+            raise
+        except Exception:
+            await self.aclose()
+            raise
+
+
 class QueryExecutorStage(PipelineStage):
     """
     Stage 4: Query Generator + Executor Loop
@@ -136,6 +296,8 @@ class QueryExecutorStage(PipelineStage):
         """Run the execution stage to generate and execute SQL."""
         schema = state.ranked_schema or state.schema_context
         dry_run = state.context.get("dry_run", False)
+        stream_results = state.context.get("stream_results", False)
+        batch_size = state.context.get("stream_batch_size", self.config.stream_batch_size)
         
         if not state.plan:
             raise ExecutionError("QueryPlan is required for QueryExecutorStage")
@@ -146,10 +308,16 @@ class QueryExecutorStage(PipelineStage):
             schema,
             dry_run=dry_run,
             conversation_context=conversation_context,
+            stream_results=stream_results,
+            batch_size=batch_size,
         )
         
         state.sql = self.last_generated_sql
-        state.df = final_result
+        if stream_results:
+            state.stream = final_result
+            state.df = None
+        else:
+            state.df = final_result
         state.conversation.append(
             ConversationTurn(
                 user_query=state.query,
@@ -185,14 +353,16 @@ class QueryExecutorStage(PipelineStage):
         schema: SchemaContext,
         dry_run: bool = False,
         conversation_context: str = "",
+        stream_results: bool = False,
+        batch_size: Optional[int] = None,
     ) -> Any:
-        """Execute the query plan and return the result DataFrame."""
+        """Execute the query plan and return a DataFrame or a final-result stream."""
         import polars as pl
         
         results_store = ResultStore()
         final_result = None
 
-        for step in plan.steps:
+        for step_index, step in enumerate(plan.steps):
             sql = ""
             error_context = ""
             success = False
@@ -200,6 +370,8 @@ class QueryExecutorStage(PipelineStage):
             
             # Gather previous context if dependencies exist
             prev_context = results_store.get_context(step.depends_on)
+            is_final_step = step_index == len(plan.steps) - 1
+            should_stream_step = stream_results and is_final_step and not dry_run
 
             for attempt in range(self.max_retries):
                 # 1. Generate
@@ -221,6 +393,21 @@ class QueryExecutorStage(PipelineStage):
                 
                 # 3. Execute
                 try:
+                    if should_stream_step:
+                        sql = apply_query_modifiers(sql, schema, self.config)
+                        stream = PolarsBatchStream(
+                            self.engine,
+                            sql,
+                            schema,
+                            self.config,
+                            step.id,
+                            batch_size or self.config.stream_batch_size,
+                            self.callbacks,
+                        ).open()
+                        result_df = stream
+                        success = True
+                        break
+
                     with self.engine.connect() as conn:
                         # AST modification
                         sql = apply_query_modifiers(sql, schema, self.config)
@@ -275,6 +462,8 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
     async def run(self, state: PipelineState) -> PipelineState:
         schema = state.ranked_schema or state.schema_context
         dry_run = state.context.get("dry_run", False)
+        stream_results = state.context.get("stream_results", False)
+        batch_size = state.context.get("stream_batch_size", self.config.stream_batch_size)
 
         if not state.plan:
             raise ExecutionError("QueryPlan is required for AsyncQueryExecutorStage")
@@ -287,10 +476,16 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
             schema,
             dry_run=dry_run,
             conversation_context=conversation_context,
+            stream_results=stream_results,
+            batch_size=batch_size,
         )
 
         state.sql = self.last_generated_sql
-        state.df = final_result
+        if stream_results:
+            state.stream = final_result
+            state.df = None
+        else:
+            state.df = final_result
         state.conversation.append(
             ConversationTurn(
                 user_query=state.query,
@@ -326,17 +521,21 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
         schema: SchemaContext,
         dry_run: bool = False,
         conversation_context: str = "",
+        stream_results: bool = False,
+        batch_size: Optional[int] = None,
     ) -> Any:
         import polars as pl
 
         results_store = ResultStore()
         final_result = None
 
-        for step in plan.steps:
+        for step_index, step in enumerate(plan.steps):
             error_context = ""
             success = False
             result_df = None
             prev_context = results_store.get_context(step.depends_on)
+            is_final_step = step_index == len(plan.steps) - 1
+            should_stream_step = stream_results and is_final_step and not dry_run
 
             for attempt in range(self.max_retries):
                 sql = await self._generate_sql(
@@ -357,6 +556,20 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
                 try:
                     sql = apply_query_modifiers(sql, schema, self.config)
                     query_to_run = f"EXPLAIN {sql}" if dry_run else sql
+
+                    if should_stream_step:
+                        stream = await AsyncPolarsBatchStream(
+                            self.engine,
+                            query_to_run,
+                            schema,
+                            self.config,
+                            step.id,
+                            batch_size or self.config.stream_batch_size,
+                            self.callbacks,
+                        ).open()
+                        result_df = stream
+                        success = True
+                        break
 
                     async with self.engine.connect() as conn:
                         async with conn.begin():

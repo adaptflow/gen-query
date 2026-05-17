@@ -123,6 +123,35 @@ class GenQuery:
         )
         return self.pipeline.execute(state)
 
+    def stream(
+        self,
+        query: str,
+        conversation: Optional[List[ConversationTurn]] = None,
+        batch_size: Optional[int] = None,
+    ) -> QueryResult:
+        """
+        Generate SQL, plan, and return a QueryResult with a final-result stream.
+
+        The stream yields Polars DataFrame batches, respects the configured
+        row_limit, and should be consumed fully or closed explicitly. Use it as
+        a context manager when you may exit iteration early:
+
+            result = gq.stream("show orders")
+            with result.stream as batches:
+                for batch in batches:
+                    ...
+        """
+        state = PipelineState(
+            query=query,
+            conversation=conversation or [],
+            context={
+                "dry_run": False,
+                "stream_results": True,
+                "stream_batch_size": batch_size or self.config.stream_batch_size,
+            }
+        )
+        return self.pipeline.execute(state)
+
     def run(
         self,
         query: str,

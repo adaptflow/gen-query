@@ -46,6 +46,7 @@ class GenQueryConfig(BaseModel):
     schema_cache_ttl_seconds: int = 3600
     schema_cache_dir: str = ".gq_cache"
     row_limit: int = 1000
+    stream_batch_size: int = 10000
 
     @classmethod
     def from_yaml(cls, path: str, connection_string: Optional[str] = None, schema_name: Optional[str] = None, connect_args: Optional[Dict[str, Any]] = None) -> "GenQueryConfig":

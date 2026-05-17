@@ -4,7 +4,7 @@ import tempfile
 import os
 from sqlalchemy import create_engine
 from genquery.config import GenQueryConfig, TableFilterConfig
-from genquery.schema.inspector import SchemaInspector
+from genquery.pipeline.inspector.inspector import SchemaInspectorStage
 
 def setup_test_db(db_path: str):
     conn = sqlite3.connect(db_path)
@@ -19,6 +19,7 @@ def test_inspector():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         path = f.name
         
+    engine = None
     try:
         setup_test_db(path)
         
@@ -27,7 +28,8 @@ def test_inspector():
             table_filters=TableFilterConfig(exclude=["_audit_log"])
         )
         
-        inspector = SchemaInspector(config)
+        engine = create_engine(config.connection_string, connect_args=config.connect_args)
+        inspector = SchemaInspectorStage(engine, config)
         schema = inspector.get_schema()
         
         assert schema.dialect == "sqlite"
@@ -43,4 +45,6 @@ def test_inspector():
         id_col = next(c for c in users_meta.columns if c.name == "id")
         assert id_col.primary_key is True
     finally:
+        if engine is not None:
+            engine.dispose()
         os.remove(path)
