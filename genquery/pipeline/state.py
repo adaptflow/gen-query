@@ -21,10 +21,21 @@ class PipelineState(BaseModel):
 
 class PipelineStage:
     """
-    Abstract base class for a pipeline stage.
+    Abstract base class for a synchronous pipeline stage.
     """
     def run(self, state: PipelineState) -> PipelineState:
         """
         Executes the logic of this stage and returns the updated state.
         """
         raise NotImplementedError("PipelineStage must implement the 'run' method.")
+
+class AsyncPipelineStage:
+    """
+    Abstract base class for an asynchronous pipeline stage.
+    """
+    async def run(self, state: PipelineState) -> PipelineState:
+        """
+        Asynchronously executes the logic of this stage and returns the updated state.
+        """
+        raise NotImplementedError("AsyncPipelineStage must implement the 'run' method.")
+

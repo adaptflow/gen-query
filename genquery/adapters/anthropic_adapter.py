@@ -1,4 +1,4 @@
-from .base import LLMAdapter, Message
+from .base import AsyncLLMAdapter, LLMAdapter, Message
 from typing import Any, List
 
 class AnthropicAdapter(LLMAdapter):
@@ -32,6 +32,27 @@ class AnthropicAdapter(LLMAdapter):
         system_msg = next((m.content for m in messages if m.role == "system"), "")
         
         response = self.client.messages.create(
+            model=self.model,
+            system=system_msg,
+            messages=formatted_messages, # type: ignore
+            **kwargs
+        )
+        return response.content[0].text
+
+class AsyncAnthropicAdapter(AsyncLLMAdapter):
+    """
+    Async adapter for Anthropic's Claude language models.
+    """
+    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+        import anthropic
+        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+        self.model = model
+
+    async def acomplete(self, messages: List[Message], **kwargs: Any) -> str:
+        """Asynchronously generate completion for the given messages."""
+        formatted_messages = [{"role": m.role, "content": m.content} for m in messages if m.role != "system"]
+        system_msg = next((m.content for m in messages if m.role == "system"), "")
+        response = await self.client.messages.create(
             model=self.model,
             system=system_msg,
             messages=formatted_messages, # type: ignore
