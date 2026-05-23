@@ -40,28 +40,28 @@ pip install sqlalchemy polars pydantic sqlglot pyyaml requests
 # pip install openai anthropic google-generativeai langchain
 ```
 
-### Async Database Extras
+### Database Driver Extras
 
-For async usage, install the async driver for your database:
+Install only the drivers you need for your database (both sync and async are included):
 
 ```bash
-# PostgreSQL
-pip install "genquery[postgres-async]"
+# PostgreSQL (psycopg2 + asyncpg)
+pip install "genquery[postgres]"
 
-# SQLite
-pip install "genquery[sqlite-async]"
+# MySQL (mysqlclient + asyncmy)
+pip install "genquery[mysql]"
 
-# MySQL
-pip install "genquery[mysql-async]"
+# MSSQL (pymssql + aioodbc)
+pip install "genquery[mssql]"
 
-# MSSQL
-pip install "genquery[mssql-async]"
+# Oracle (oracledb)
+pip install "genquery[oracle]"
 
-# Oracle
-pip install "genquery[oracle-async]"
+# SQLite (aiosqlite)
+pip install "genquery[sqlite]"
 
-# All async database extras
-pip install "genquery[async]"
+# All database drivers
+pip install "genquery[all]"
 ```
 
 ## Quick Start
