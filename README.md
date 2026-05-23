@@ -10,6 +10,7 @@ GenQuery is an agentic, highly customizable Natural Language to SQL generation a
 - **Async LLM Support**: Async adapters are available for OpenAI, Anthropic, Gemini, LangChain, and Ollama.
 - **Security-First**: Enforces strictly read-only (`SELECT`) queries via AST validation and injects Row-Level Security (RLS) policies dynamically.
 - **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, schema caching, final-result streaming, configurable row limits, and statement timeouts.
+- **Dry Run Mode**: Use `dry_run()` to safely generate SQL and execution plans without executing against the database. Perfect for debugging, review, or understanding how a query will be interpreted before running it.
 - **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full final result in memory. Both sync and async streaming are supported.
 - **Command-Line Interface**: Run one-liners directly from your terminal with the `genquery` CLI entry point.
 - **Customizable**: Swap out any pipeline stage to fit your specific needs or integrate with your own systems.
@@ -104,6 +105,23 @@ print(result.sql)
 print(result.df)
 ```
 
+### Dry Run (Safe Inspection)
+
+Use `dry_run()` to generate SQL and the execution plan **without executing against the database**:
+
+```python
+result = gq.dry_run("Show me the top 5 customers by total order amount this year")
+
+print("Generated SQL:")
+print(result.sql)
+
+print("\nExecution Plan Steps:")
+for step in result.steps:
+    print(f"  - {step.description}")
+```
+
+The `dry_run()` method runs the full pipeline through schema inspection, table ranking, SQL generation, and security validation — then prefixes the generated SQL with `EXPLAIN` instead of executing it. The returned `QueryResult` contains the generated SQL, the execution plan, and the step-by-step plan details, but `df` and `stream` will be `None`. This is completely safe for debugging, reviewing generated SQL, or understanding how the system interprets a natural-language query before running it against live data.
+
 ## CLI Quick Start
 
 GenQuery ships with a convenient command-line interface for quick experimentation. After installing the package, use the `genquery` command directly from your terminal:
@@ -183,6 +201,23 @@ result = await gq.generate("Show average order value by region")
 print(result.sql)
 print(result.df)
 ```
+
+### Async Dry Run (Safe Inspection)
+
+`AsyncGenQuery` also provides `dry_run()` for safe async inspection:
+
+```python
+result = await gq.dry_run("Show me the top 5 customers by total order amount this year")
+
+print("Generated SQL:")
+print(result.sql)
+
+print("\nExecution Plan Steps:")
+for step in result.steps:
+    print(f"  - {step.description}")
+```
+
+The async `dry_run()` behaves identically to its sync counterpart — it generates SQL and an execution plan without executing against the database, returning a `QueryResult` with `sql`, `plan`, and `steps` populated, but `df` and `stream` set to `None`.
 
 ## Streaming Results
 

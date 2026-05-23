@@ -167,6 +167,33 @@ class AsyncGenQuery:
             return result
         return result.df
 
+    async def dry_run(
+        self,
+        query: str,
+        conversation: Optional[List[ConversationTurn]] = None,
+    ) -> QueryResult:
+        """
+        Generate SQL and execution plan WITHOUT executing against the database.
+
+        Safely inspect the generated SQL and step-by-step plan before running
+        anything. Useful for debugging, review, or understanding how the system
+        interprets a natural-language query.
+
+        Args:
+            query: The natural-language query to analyze.
+            conversation: Optional list of prior conversation turns for context.
+
+        Returns:
+            A QueryResult containing the generated SQL, the execution plan,
+            and steps — but no DataFrame or stream (df will be None).
+        """
+        state = PipelineState(
+            query=query,
+            conversation=conversation or [],
+            context={"dry_run": True}
+        )
+        return await self.pipeline.execute(state)
+
     async def close(self) -> None:
         """Dispose the async SQLAlchemy engine and close pooled connections."""
         await self.engine.dispose()
