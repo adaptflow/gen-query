@@ -11,6 +11,7 @@ GenQuery is an agentic, highly customizable Natural Language to SQL generation a
 - **Security-First**: Enforces strictly read-only (`SELECT`) queries via AST validation and injects Row-Level Security (RLS) policies dynamically.
 - **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, schema caching, final-result streaming, configurable row limits, and statement timeouts.
 - **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full final result in memory. Both sync and async streaming are supported.
+- **Command-Line Interface**: Run one-liners directly from your terminal with the `genquery` CLI entry point.
 - **Customizable**: Swap out any pipeline stage to fit your specific needs or integrate with your own systems.
 
 ## Architecture
@@ -101,6 +102,45 @@ print(result.df)
 result = gq.generate("Show average order value by region")
 print(result.sql)
 print(result.df)
+```
+
+## CLI Quick Start
+
+GenQuery ships with a convenient command-line interface for quick experimentation. After installing the package, use the `genquery` command directly from your terminal:
+
+```bash
+# Basic usage (OpenAI API key defaults to OPENAI_API_KEY env var)
+genquery "Count orders by status" --conn postgresql://user:pass@localhost:5432/mydb
+
+# Specify a different model
+genquery "List all orders this month" --conn sqlite:///app.db --model gpt-5.4 --api-key sk-...
+
+# Use a YAML configuration file
+genquery "Count users by role" --conn postgresql://user:pass@localhost:5432/mydb --config config.yaml
+
+# Override the database schema
+genquery "Find all transactions of this week" --conn postgresql://user:pass@localhost:5432/mydb --schema analytics
+
+# Point to a custom OpenAI-compatible endpoint
+genquery "Find recent orders" --conn sqlite:///app.db --base-url https://openrouter.ai/api/v1 --api-key dummy-key
+```
+
+All arguments:
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `query` | ✅ (positional) | — | Natural language query |
+| `--conn` | ✅ | — | Database connection string |
+| `--api-key` | ❌ | `OPENAI_API_KEY` env var | OpenAI API key |
+| `--model` | ❌ | `gpt-5.5` | OpenAI model name |
+| `--base-url` | ❌ | `https://api.openai.com/v1` | Base URL for the OpenAI-compatible API. Useful for local proxies, self-hosted models, or alternative providers. |
+| `--schema` | ❌ | `public` | Database schema |
+| `--config` | ❌ | `None` | Path to YAML config file |
+
+For development, install the package in editable mode to test changes:
+
+```bash
+pip install -e .
+genquery "Count orders by statuss" --conn sqlite:///app.db
 ```
 
 ## Async Quick Start
