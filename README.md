@@ -1,32 +1,67 @@
 # GenQuery
 
-GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as DataFrames or streaming Polars batches.
+GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as Polars DataFrames or streaming Polars batches.
 
 ## Key Features
 
-- **Agentic Pipeline**: Broken down into discrete, customizable stages (Inspector, Ranker, Planner, Executor).
+- **Agentic Pipeline**: Broken down into discrete, customizable stages: Inspector, Ranker, Planner, Executor.
+- **Sync and Async APIs**: Use `GenQuery` in synchronous apps or `AsyncGenQuery` in asyncio-based web servers such as FastAPI, Starlette, and aiohttp.
 - **Multi-LLM Support**: Built-in adapters for OpenAI, Anthropic, Gemini, LangChain, and Ollama local models.
+- **Async LLM Support**: Async adapters are available for OpenAI, Anthropic, Gemini, LangChain, and Ollama.
 - **Security-First**: Enforces strictly read-only (`SELECT`) queries via AST validation and injects Row-Level Security (RLS) policies dynamically.
-- **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, schema caching, and final-result streaming.
-- **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full result in memory.
+- **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, schema caching, final-result streaming, configurable row limits, and statement timeouts.
+- **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full final result in memory. Both sync and async streaming are supported.
 - **Customizable**: Swap out any pipeline stage to fit your specific needs or integrate with your own systems.
 
 ## Architecture
 
 The system operates on a 4-stage pipeline by default:
+
 1. **Schema Inspector**: Connects to the database via SQLAlchemy, extracts schema metadata, and caches it.
 2. **Semantic Ranker**: Uses an LLM to identify and rank only the relevant tables for the user's query, reducing context overhead.
-3. **Query Planner**: Breaks the natural language request down into a logical execution plan (single step, sequential, etc.).
+3. **Query Planner**: Breaks the natural language request down into a logical execution plan.
 4. **Query Executor**: Generates SQL for each step in the plan, applies AST-based security limits and validations, executes the queries safely, and returns a Polars DataFrame or a final-result stream of Polars DataFrame batches.
+
+Both synchronous and asynchronous pipeline implementations are available.
 
 ## Installation
 
-Ensure you have the required dependencies. You'll generally need `sqlalchemy`, `polars`, `pydantic`, `sqlglot`, and the SDK for your preferred LLM.
+Install GenQuery and the dependencies for your preferred LLM/database stack:
+
+```bash
+pip install genquery
+```
+
+For local development or manual dependency installation:
 
 ```bash
 pip install sqlalchemy polars pydantic sqlglot pyyaml requests
 # Plus your LLM provider of choice:
 # pip install openai anthropic google-generativeai langchain
+```
+
+### Async Database Extras
+
+For async usage, install the async driver for your database:
+
+```bash
+# PostgreSQL
+pip install "genquery[postgres-async]"
+
+# SQLite
+pip install "genquery[sqlite-async]"
+
+# MySQL
+pip install "genquery[mysql-async]"
+
+# MSSQL
+pip install "genquery[mssql-async]"
+
+# Oracle
+pip install "genquery[oracle-async]"
+
+# All async database extras
+pip install "genquery[async]"
 ```
 
 ## Quick Start
@@ -38,42 +73,80 @@ from genquery.adapters.openai_adapter import OpenAIAdapter
 # 1. Initialize your LLM adapter
 llm = OpenAIAdapter(api_key="sk-...", model="gpt-5.5")
 
-
-# 2. Setup GenQuery (multiple configuration options)
-
-# Option A: Simple setup with individual parameters
+# 2. Setup GenQuery with individual parameters
 gq = GenQuery(
     llm=llm,
     connection_string="postgresql://user:pass@localhost:5432/mydb",
-    schema="public"
+    schema="public",
 )
 
-# Option B: Using a pre-configured GenQueryConfig object
-from genquery.config import GenQueryConfig, TableFilterConfig, RLSPolicy
-
-config = GenQueryConfig(
-    connection_string="postgresql://user:pass@localhost:5432/mydb",
-    schema_name="public",
-    connect_args={"connect_timeout": 10},
-    table_filters=TableFilterConfig(exclude=["migrations", "audit_logs"]),
-    statement_timeout_ms=10000,
-    row_limit=100,
-    stream_batch_size=10000,
-    rls_policies=[RLSPolicy(column="tenant_id", value="t-12345")]
-)
-gq = GenQuery(llm=llm, config=config)
-
-# Option C: Using a YAML configuration file
-gq = GenQuery(llm=llm, config_path="config.yaml")
-
-# 3. Run a query!
+# 3. Run a query
 df = gq.run("Show me the top 5 customers by total order amount this year")
 print(df)
 ```
 
+To receive SQL, plan, DataFrame, and updated conversation history:
+
+```python
+result = gq.run("Show total revenue by month", return_result=True)
+
+print(result.sql)
+print(result.plan)
+print(result.df)
+```
+
+`GenQuery.generate(...)` also executes the full pipeline and returns a `QueryResult`:
+
+```python
+result = gq.generate("Show average order value by region")
+print(result.sql)
+print(result.df)
+```
+
+## Async Quick Start
+
+Use `AsyncGenQuery` in asyncio-based applications such as FastAPI.
+
+```python
+import asyncio
+from genquery import AsyncGenQuery
+from genquery.adapters.openai_adapter import AsyncOpenAIAdapter
+
+async def main():
+    llm = AsyncOpenAIAdapter(api_key="sk-...", model="gpt-5-mini")
+
+    async with AsyncGenQuery(
+        llm=llm,
+        connection_string="postgresql+asyncpg://user:pass@localhost:5432/mydb",
+        schema="public",
+    ) as gq:
+        df = await gq.run("Show me the top 5 customers by total order amount this year")
+        print(df)
+
+asyncio.run(main())
+```
+
+To receive SQL, plan, DataFrame, and updated conversation history:
+
+```python
+result = await gq.run("Show total revenue by month", return_result=True)
+
+print(result.sql)
+print(result.plan)
+print(result.df)
+```
+
+`AsyncGenQuery.generate(...)` matches the sync `generate(...)` behavior and executes the full pipeline:
+
+```python
+result = await gq.generate("Show average order value by region")
+print(result.sql)
+print(result.df)
+```
+
 ## Streaming Results
 
-Use `stream()` when the final result may be large. Streaming is final-result-only in v1: intermediate steps in multi-step plans are still materialized so later steps can use them as context, while the final step is yielded incrementally.
+Use `stream()` when the final result may be large. Streaming is final-result-only: intermediate steps in multi-step plans are still materialized so later steps can use them as context, while the final step is yielded incrementally.
 
 The stream yields Polars DataFrame batches and respects the configured `row_limit`. Configure the default batch size with `stream_batch_size`, or override it per call with `batch_size`.
 
@@ -105,39 +178,88 @@ async with AsyncGenQuery(
 
     async with result.stream as batches:
         async for batch in batches:
+            # batch is a Polars DataFrame
             print(batch)
 ```
 
 Empty result sets yield one empty Polars DataFrame with the result columns. If you may stop iteration early, use the stream as a context manager so the database connection is closed promptly.
 
-## Supported LLMs
+## FastAPI Example
 
-GenQuery includes out-of-the-box adapters for popular models:
-- `OpenAIAdapter` (GPT)
-- `AnthropicAdapter` (Claude)
-- `GeminiAdapter` (Gemini)
-- `OllamaAdapter` (Local models)
-- `LangChainAdapter` (Wrap any LangChain BaseChatModel)
+```python
+from fastapi import FastAPI
+from genquery import AsyncGenQuery
+from genquery.adapters.openai_adapter import AsyncOpenAIAdapter
 
-## Tested databases
+app = FastAPI()
 
-- `postgres`
+@app.on_event("startup")
+async def startup():
+    llm = AsyncOpenAIAdapter(api_key="sk-...", model="gpt-5-mini")
+    app.state.gq = AsyncGenQuery(
+        llm=llm,
+        connection_string="postgresql+asyncpg://user:pass@localhost:5432/mydb",
+        schema="public",
+    )
 
-## Configuration & Security
+@app.on_event("shutdown")
+async def shutdown():
+    await app.state.gq.close()
 
-You can configure GenQuery via code or a YAML file to enforce table filters, row limits, statement timeouts, and Row-Level Security (RLS).
+@app.post("/query")
+async def query_database(payload: dict):
+    result = await app.state.gq.run(payload["query"], return_result=True)
+    return {
+        "sql": result.sql,
+        "rows": result.df.to_dicts() if result.df is not None else [],
+    }
+```
 
-### Read-Only Enforcement
-All generated SQL is validated using AST parsing to ensure it contains only `SELECT` statements. `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, and other destructive operations are rejected.
+## Configuration
 
-### Row-Level Security (RLS)
-The executor can parse the generated AST and inject `WHERE` clauses for specific tables dynamically based on the current user or tenant context. This works by either:
-- **AST injection**: Automatically adding filter conditions to the parsed SQL.
-- **Session variables**: Setting PostgreSQL session variables that trigger RLS policies.
+You can configure GenQuery via code or a YAML file to enforce table filters, row limits, stream batch sizes, statement timeouts, and Row-Level Security (RLS).
+
+### Python Configuration
+
+```python
+from genquery import GenQuery
+from genquery.config import GenQueryConfig, TableFilterConfig, RLSPolicy
+
+config = GenQueryConfig(
+    connection_string="postgresql://user:pass@localhost:5432/mydb",
+    schema_name="public",
+    connect_args={"connect_timeout": 10},
+    table_filters=TableFilterConfig(exclude=["migrations", "audit_logs"]),
+    statement_timeout_ms=10000,
+    row_limit=100,
+    stream_batch_size=10000,
+    rls_policies=[RLSPolicy(column="tenant_id", value="t-12345")],
+)
+
+gq = GenQuery(llm=llm, config=config)
+```
+
+For async usage, use an async SQLAlchemy connection string:
+
+```python
+from genquery import AsyncGenQuery
+from genquery.config import GenQueryConfig
+
+config = GenQueryConfig(
+    connection_string="postgresql+asyncpg://user:pass@localhost:5432/mydb",
+    schema_name="public",
+    row_limit=100,
+    stream_batch_size=10000,
+)
+
+gq = AsyncGenQuery(llm=async_llm, config=config)
+```
+
+### YAML Configuration
 
 ```yaml
 # config.yaml
-connection_string: "postgresql://..."
+connection_string: "postgresql://user:pass@localhost:5432/mydb"
 schema_name: "public"
 statement_timeout_ms: 10000
 row_limit: 100
@@ -148,34 +270,121 @@ rls_policies:
 table_filters:
   exclude: ["migrations", "audit_logs"]
 ```
+
 ```python
 gq = GenQuery(llm=llm, config_path="config.yaml")
 ```
 
+## Supported LLMs
+
+GenQuery includes synchronous adapters for:
+
+- `OpenAIAdapter`
+- `AnthropicAdapter`
+- `GeminiAdapter`
+- `OllamaAdapter`
+- `LangChainAdapter`
+
+Async adapters are also available:
+
+- `AsyncOpenAIAdapter`
+- `AsyncAnthropicAdapter`
+- `AsyncGeminiAdapter`
+- `AsyncOllamaAdapter`
+- `AsyncLangChainAdapter`
+
+Example:
+
+```python
+from genquery.adapters.openai_adapter import OpenAIAdapter, AsyncOpenAIAdapter
+
+sync_llm = OpenAIAdapter(api_key="sk-...", model="gpt-5-mini")
+async_llm = AsyncOpenAIAdapter(api_key="sk-...", model="gpt-5-mini")
+```
+
+## Supported Databases
+
+GenQuery uses SQLAlchemy for database connectivity.
+
+### Sync Database URLs
+
+Examples:
+
+- PostgreSQL: `postgresql://user:pass@host:5432/db`
+- SQLite: `sqlite:///app.db`
+- MySQL: `mysql://user:pass@host:3306/db`
+- MSSQL: `mssql+pymssql://user:pass@host:1433/db`
+- Oracle: `oracle+oracledb://user:pass@host:1521/?service_name=service`
+
+### Async Database URLs
+
+Examples:
+
+- PostgreSQL: `postgresql+asyncpg://user:pass@host:5432/db`
+- SQLite: `sqlite+aiosqlite:///app.db`
+- MySQL: `mysql+asyncmy://user:pass@host:3306/db`
+- MSSQL: `mssql+aioodbc://user:pass@host:1433/db`
+- Oracle: `oracle+oracledb://user:pass@host:1521/?service_name=service`
+
+Async support depends on the installed SQLAlchemy-compatible async driver for each database.
+
+## Security
+
+### Read-Only Enforcement
+
+All generated SQL is validated using AST parsing to ensure it contains only read-only statements. `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, and other destructive operations are rejected.
+
+### Row Limits
+
+Generated SQL is modified to enforce configured row limits where supported. Streaming results also respect `row_limit`.
+
+### Row-Level Security
+
+The executor can apply Row-Level Security policies in two ways:
+
+- **AST injection**: Adds filter conditions to generated SQL.
+- **Session variables**: Sets PostgreSQL session variables that trigger database-native RLS policies.
+
 ## Customizing the Pipeline
 
-GenQuery's pipeline architecture makes it trivial to replace any step. For example, if you want to use your own Schema Inspector while keeping the ranker, planner, and executor running normally, you can swap out the single stage object:
+GenQuery's pipeline architecture makes it possible to replace any stage.
 
 ```python
 from genquery import GenQuery
 from genquery.pipeline.inspector.inspector import SchemaInspectorStage
 from genquery.pipeline.state import PipelineStage, PipelineState
 
-# 1. Define your custom stage
 class MyCustomInspector(PipelineStage):
     def run(self, state: PipelineState) -> PipelineState:
-        # custom schema extraction logic here...
         state.schema_context = custom_schema_object
         return state
 
-# 2. Instantiate genquery normally
 gq = GenQuery(llm=my_llm_adapter, connection_string="...")
 
-# 3. Replace only the target stage
 gq.pipeline.replace_stage(SchemaInspectorStage, MyCustomInspector())
 
-# 4. Run query 
 result = gq.run("Find the average salary of all active employees")
+```
+
+## Customizing the Async Pipeline
+
+Use `AsyncPipelineStage` for async custom stages.
+
+```python
+from genquery import AsyncGenQuery
+from genquery.pipeline.inspector.inspector import AsyncSchemaInspectorStage
+from genquery.pipeline.state import AsyncPipelineStage, PipelineState
+
+class MyAsyncCustomInspector(AsyncPipelineStage):
+    async def run(self, state: PipelineState) -> PipelineState:
+        state.schema_context = await load_schema_context()
+        return state
+
+gq = AsyncGenQuery(llm=async_llm_adapter, connection_string="postgresql+asyncpg://...")
+
+gq.pipeline.replace_stage(AsyncSchemaInspectorStage, MyAsyncCustomInspector())
+
+result = await gq.run("Find the average salary of all active employees", return_result=True)
 ```
 
 ## Callbacks and Observability
@@ -190,4 +399,35 @@ class MyLogger(GenQueryCallbackHandler):
         print(f"Generated SQL for {step_id}: {sql}")
 
 gq = GenQuery(llm=llm, connection_string="...", callbacks=MyLogger())
+```
+
+## Async Callbacks
+
+Use `AsyncGenQueryCallbackHandler` for async pipelines.
+
+Async callbacks are additive to sync callbacks. The default async methods call the corresponding sync methods, so you can override sync methods for lightweight logging or override async methods for non-blocking work.
+
+```python
+from genquery import AsyncGenQuery
+from genquery.core.callbacks import AsyncGenQueryCallbackHandler
+
+class MyAsyncLogger(AsyncGenQueryCallbackHandler):
+    async def aon_sql_generated(self, step_id: str, sql: str) -> None:
+        await write_log_async(f"Generated SQL for {step_id}: {sql}")
+
+gq = AsyncGenQuery(
+    llm=async_llm,
+    connection_string="postgresql+asyncpg://...",
+    callbacks=MyAsyncLogger(),
+)
+```
+
+For lightweight sync-style logging in async pipelines:
+
+```python
+from genquery.core.callbacks import AsyncGenQueryCallbackHandler
+
+class MyLogger(AsyncGenQueryCallbackHandler):
+    def on_sql_generated(self, step_id: str, sql: str) -> None:
+        print(f"Generated SQL for {step_id}: {sql}")
 ```

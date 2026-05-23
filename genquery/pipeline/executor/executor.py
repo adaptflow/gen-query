@@ -116,6 +116,19 @@ def build_timeout_statement(dialect: str, timeout_ms: int) -> Optional[str]:
     return None
 
 
+def build_async_timeout_statement(dialect: str, timeout_ms: int) -> Optional[str]:
+    """Return an async-safe timeout statement for SQLAlchemy async drivers.
+
+    The aioodbc/pyodbc SQL Server async path raises ``No results. Previous SQL
+    was not a query`` for ``SET LOCK_TIMEOUT`` before a streamed SELECT. Skip it
+    there so async streaming remains usable; sync MSSQL still applies it.
+    """
+    if dialect == "mssql":
+        return None
+    return build_timeout_statement(dialect, timeout_ms)
+
+
+
 class ExecutionError(Exception):
     """Exception raised for errors during query execution."""
     pass
@@ -224,7 +237,7 @@ class AsyncPolarsBatchStream:
                 for policy in self.config.rls_policies:
                     if policy.session_variable:
                         await self._conn.execute(text(f"SET LOCAL {policy.session_variable} = '{policy.value}'"))
-            timeout_statement = build_timeout_statement(self.schema.dialect, self.config.statement_timeout_ms)
+            timeout_statement = build_async_timeout_statement(self.schema.dialect, self.config.statement_timeout_ms)
             if timeout_statement:
                 await self._conn.execute(text(timeout_statement))
             self._result = await self._conn.stream(text(self.query))
@@ -578,7 +591,7 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
                                     if policy.session_variable:
                                         await conn.execute(text(f"SET LOCAL {policy.session_variable} = '{policy.value}'"))
 
-                            timeout_statement = build_timeout_statement(schema.dialect, self.config.statement_timeout_ms)
+                            timeout_statement = build_async_timeout_statement(schema.dialect, self.config.statement_timeout_ms)
                             if timeout_statement:
                                 await conn.execute(text(timeout_statement))
 
