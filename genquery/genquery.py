@@ -108,6 +108,16 @@ class GenQuery:
         pipeline.add_stage(QueryExecutorStage(self.llm, self.engine, self.validator, self.config, self.callbacks))
         return pipeline
 
+    def __repr__(self) -> str:
+        return (
+            f"GenQuery("
+            f"dialect={self.engine.dialect.name}, "
+            f"schema={self.config.schema_name}, "
+            f"pipeline_stages={len(self.pipeline.stages)}, "
+            f"llm={type(self.llm).__name__}"
+            f")"
+        )
+
     def generate(
         self,
         query: str,
