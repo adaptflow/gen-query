@@ -3,6 +3,10 @@
 # connection_string: "postgresql://user:password@localhost:5432/dbname"
 schema: "public"
 
+# Logging (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default is INFO.
+# Keep INFO logs minimal; use DEBUG for detailed pipeline diagnostics.
+log_level: "INFO"
+
 table_filters:
   include:
     # - "users"

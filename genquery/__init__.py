@@ -6,4 +6,5 @@ __version__ = "0.1.0"
 
 from genquery.genquery import GenQuery
 from genquery.async_genquery import AsyncGenQuery
+from genquery.logging import configure_logging
 

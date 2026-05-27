@@ -1,9 +1,11 @@
 from typing import Any, Generic, List, Optional, TypeVar
 from genquery.core.models import ConversationTurn
 from genquery.pipeline.state import AsyncPipelineStage, PipelineState, PipelineStage
+from genquery.logging import get_logger
 
 
 StageT = TypeVar("StageT")
+logger = get_logger(__name__)
 
 
 class QueryResult:
@@ -79,9 +81,18 @@ class AsyncGenQueryPipeline(PipelineStageManager[AsyncPipelineStage]):
         """
         Executes all async stages in the pipeline sequentially.
         """
+        logger.debug("Starting async pipeline with %s stages", len(self.stages))
         for stage in self.stages:
-            state = await stage.run(state)
+            stage_name = type(stage).__name__
+            logger.debug("Starting async pipeline stage: %s", stage_name)
+            try:
+                state = await stage.run(state)
+            except Exception:
+                logger.exception("Async pipeline stage failed: %s", stage_name)
+                raise
+            logger.debug("Completed async pipeline stage: %s", stage_name)
 
+        logger.debug("Async pipeline completed")
         return build_query_result(state)
 
 
@@ -96,7 +107,16 @@ class GenQueryPipeline(PipelineStageManager[PipelineStage]):
         """
         Executes all stages in the pipeline sequentially.
         """
+        logger.debug("Starting pipeline with %s stages", len(self.stages))
         for stage in self.stages:
-            state = stage.run(state)
+            stage_name = type(stage).__name__
+            logger.debug("Starting pipeline stage: %s", stage_name)
+            try:
+                state = stage.run(state)
+            except Exception:
+                logger.exception("Pipeline stage failed: %s", stage_name)
+                raise
+            logger.debug("Completed pipeline stage: %s", stage_name)
             
+        logger.debug("Pipeline completed")
         return build_query_result(state)

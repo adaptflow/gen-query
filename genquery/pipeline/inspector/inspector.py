@@ -13,8 +13,12 @@ from genquery.core.callbacks import AsyncGenQueryCallbackHandler, GenQueryCallba
 from genquery.pipeline.state import AsyncPipelineStage, PipelineStage, PipelineState
 
 from genquery.pipeline.inspector.cache import SchemaCache
+from genquery.logging import get_logger
 import asyncio
 import threading
+
+
+logger = get_logger(__name__)
 
 
 def inspect_schema(bind: Any, config: GenQueryConfig) -> SchemaContext:
@@ -29,7 +33,12 @@ def inspect_schema(bind: Any, config: GenQueryConfig) -> SchemaContext:
     tables: List[TableMetadata] = []
     try:
         table_names = inspector.get_table_names(**schema_kwargs)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Schema-specific table inspection failed for schema=%s; falling back to default schema: %s",
+            config.schema_name,
+            exc,
+        )
         # Fallback if specific schema fails or is unsupported.
         table_names = inspector.get_table_names()
 
@@ -56,9 +65,9 @@ def inspect_schema(bind: Any, config: GenQueryConfig) -> SchemaContext:
                 multi_comments = inspector.get_multi_table_comment(schema=schema_val, filter_names=filtered_tables)
                 use_multi_comments = True
             except NotImplementedError:
-                pass
-        except Exception:
-            pass
+                logger.debug("Bulk table comments are not supported by this dialect")
+        except Exception as exc:
+            logger.debug("Bulk schema inspection unavailable; falling back to per-table inspection: %s", exc)
 
     for table_name in filtered_tables:
         columns_meta = []
@@ -126,12 +135,14 @@ class SchemaInspectorStage(PipelineStage):
 
     def run(self, state: PipelineState) -> PipelineState:
         if state.schema_context is not None:
+            logger.debug("Skipping schema inspection because schema context is already populated")
             # Skip if schema context was already provided by developer
             return state
             
         # Try Cache First
         cached_schema = self.cache.get()
         if cached_schema:
+            logger.debug("Using cached schema context with %s tables", len(cached_schema.tables))
             state.schema_context = cached_schema
             # If approaching TTL, refresh in background
             if self.cache.should_refresh_soon():
@@ -149,14 +160,16 @@ class SchemaInspectorStage(PipelineStage):
             try:
                 new_schema = self.get_schema()
                 self.cache.set(new_schema)
-            except Exception as e:
-                pass # Safe background failure
+            except Exception:
+                logger.exception("Background schema cache refresh failed")
         t = threading.Thread(target=refresh_job, daemon=True)
         t.start()
 
     def get_schema(self) -> SchemaContext:
         self.callbacks.on_inspector_start()
+        logger.debug("Inspecting database schema")
         schema_context = inspect_schema(self.engine, self.config)
+        logger.debug("Schema inspection completed with %s tables", len(schema_context.tables))
         self.callbacks.on_inspector_end(len(schema_context.tables))
         return schema_context
 
@@ -174,10 +187,12 @@ class AsyncSchemaInspectorStage(AsyncPipelineStage):
 
     async def run(self, state: PipelineState) -> PipelineState:
         if state.schema_context is not None:
+            logger.debug("Skipping async schema inspection because schema context is already populated")
             return state
 
         cached_schema = self.cache.get()
         if cached_schema:
+            logger.debug("Using cached async schema context with %s tables", len(cached_schema.tables))
             state.schema_context = cached_schema
             if self.cache.should_refresh_soon():
                 self._trigger_background_refresh()
@@ -193,18 +208,20 @@ class AsyncSchemaInspectorStage(AsyncPipelineStage):
                 new_schema = await self.get_schema()
                 self.cache.set(new_schema)
             except Exception:
-                pass
+                logger.exception("Async background schema cache refresh failed")
         try:
             asyncio.create_task(refresh_job())
-        except RuntimeError:
-            pass
+        except RuntimeError as exc:
+            logger.warning("Unable to start async schema cache refresh task: %s", exc)
 
     async def get_schema(self) -> SchemaContext:
         await self.callbacks.aon_inspector_start()
+        logger.debug("Inspecting database schema asynchronously")
 
         async with self.engine.connect() as conn:
             schema_context = await conn.run_sync(lambda sync_connection: inspect_schema(sync_connection, self.config))
 
+        logger.debug("Async schema inspection completed with %s tables", len(schema_context.tables))
         await self.callbacks.aon_inspector_end(len(schema_context.tables))
         return schema_context
 

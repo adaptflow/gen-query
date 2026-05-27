@@ -1,4 +1,4 @@
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional, Dict, List, Union
 from sqlalchemy import create_engine, event
 from genquery.adapters.base import LLMAdapter
 from genquery.config import GenQueryConfig, TableFilterConfig
@@ -12,6 +12,9 @@ from genquery.pipeline.executor.validator import SecurityValidator
 from genquery.core.callbacks import GenQueryCallbackHandler
 from genquery.core.models import ConversationTurn
 from genquery.core.utils import get_dialect
+from genquery.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 class GenQuery:
     """
@@ -30,7 +33,8 @@ class GenQuery:
         table_filter: Optional[Dict[str, Any]] = None,
         config_path: Optional[str] = None,
         callbacks: Optional[GenQueryCallbackHandler] = None,
-        custom_stages: Optional[List[PipelineStage]] = None
+        custom_stages: Optional[List[PipelineStage]] = None,
+        log_level: Optional[Union[str, int]] = None
     ):
         """
         Initialize the GenQuery orchestrator.
@@ -45,6 +49,7 @@ class GenQuery:
             config_path: Optional path to a YAML configuration file.
             callbacks: Optional callback handler for pipeline events.
             custom_stages: Optional list of custom pipeline stages to use instead of the default.
+            log_level: Optional log level override (DEBUG, INFO, WARNING, ERROR, or CRITICAL).
         """
         # Configuration resolution priority:
         # 1. Direct GenQueryConfig object
@@ -54,6 +59,8 @@ class GenQuery:
             self.config = config
             if connect_args:
                 self.config.connect_args = {**self.config.connect_args, **connect_args}
+            if log_level is not None:
+                self.config.log_level = log_level
         elif config_path:
             self.config = GenQueryConfig.from_yaml(
                 config_path,
@@ -61,14 +68,27 @@ class GenQuery:
                 schema_name=schema,
                 connect_args=connect_args
             )
+            if log_level is not None:
+                self.config.log_level = log_level
         else:
             filter_config = TableFilterConfig(**table_filter) if table_filter else TableFilterConfig()
             self.config = GenQueryConfig(
                 connection_string=connection_string,
                 schema_name=schema,
                 connect_args=connect_args or {},
-                table_filters=filter_config
+                table_filters=filter_config,
+                log_level=log_level or "INFO"
             )
+        configure_logging(self.config.log_level)
+        logger.info("Initializing GenQuery")
+        logger.debug(
+            "Resolved GenQuery configuration: schema=%s, row_limit=%s, stream_batch_size=%s, log_level=%s",
+            self.config.schema_name,
+            self.config.row_limit,
+            self.config.stream_batch_size,
+            self.config.log_level,
+        )
+
         self.llm = llm
         self.callbacks = callbacks or GenQueryCallbackHandler()
         
@@ -84,6 +104,7 @@ class GenQuery:
 
         self.engine = create_engine(self.config.connection_string, connect_args=engine_connect_args)
         dialect_name = get_dialect(self.engine)
+        logger.debug("Created SQLAlchemy engine for dialect=%s", dialect_name)
 
         # For Oracle: set the current schema on every connection so unqualified table names resolve correctly
         if dialect_name == "oracle" and self.config.schema_name:
@@ -97,8 +118,10 @@ class GenQuery:
 
         if custom_stages is not None:
             self.pipeline = GenQueryPipeline(stages=custom_stages)
+            logger.debug("Using %s custom pipeline stages", len(custom_stages))
         else:
             self.pipeline = self._build_default_pipeline()
+        logger.info("GenQuery initialized for dialect=%s", dialect_name)
 
     def _build_default_pipeline(self) -> GenQueryPipeline:
         pipeline = GenQueryPipeline()
@@ -131,7 +154,11 @@ class GenQuery:
             conversation=conversation or [],
             context={"dry_run": False}
         )
-        return self.pipeline.execute(state)
+        try:
+            return self.pipeline.execute(state)
+        except Exception:
+            logger.exception("Failed to generate query result")
+            raise
 
     def stream(
         self,
@@ -160,7 +187,11 @@ class GenQuery:
                 "stream_batch_size": batch_size or self.config.stream_batch_size,
             }
         )
-        return self.pipeline.execute(state)
+        try:
+            return self.pipeline.execute(state)
+        except Exception:
+            logger.exception("Failed to stream query result")
+            raise
 
     def run(
         self,
@@ -180,10 +211,15 @@ class GenQuery:
             conversation=conversation or [],
             context={"dry_run": False}
         )
-        result = self.pipeline.execute(state)
-        if return_result:
-            return result
-        return result.df
+        try:
+            result = self.pipeline.execute(state)
+            logger.debug("Query execution completed")
+            if return_result:
+                return result
+            return result.df
+        except Exception:
+            logger.exception("Failed to run query")
+            raise
 
     def dry_run(
         self,
@@ -210,4 +246,8 @@ class GenQuery:
             conversation=conversation or [],
             context={"dry_run": True}
         )
-        return self.pipeline.execute(state)
+        try:
+            return self.pipeline.execute(state)
+        except Exception:
+            logger.exception("Failed to perform dry run")
+            raise

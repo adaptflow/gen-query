@@ -10,6 +10,9 @@ from genquery.core.callbacks import AsyncGenQueryCallbackHandler, GenQueryCallba
 
 
 from genquery.config import GenQueryConfig
+from genquery.logging import get_logger
+
+logger = get_logger(__name__)
 
 RANKER_DEFAULT_PROMPT = """
 Given the following database tables, identify the most relevant tables needed to answer the user's query.
@@ -68,6 +71,7 @@ def parse_ranker_response(response: str, schema: SchemaContext, top_k: int) -> S
         filtered_tables = [table for table in schema.tables if table.name in relevant_names]
         return SchemaContext(tables=filtered_tables, dialect=schema.dialect)
     except Exception:
+        logger.warning("Failed to parse ranker response; falling back to first %s tables", top_k, exc_info=True)
         return SchemaContext(tables=schema.tables[:top_k], dialect=schema.dialect)
 
 
@@ -89,6 +93,7 @@ class SemanticRankerStage(PipelineStage):
         schema = state.schema_context
         # If no schema is available, just pass it through
         if not schema:
+            logger.warning("No schema context available; skipping semantic ranking")
             state.ranked_schema = None
             self.callbacks.on_ranker_end(0)
             return state
@@ -108,8 +113,10 @@ class SemanticRankerStage(PipelineStage):
     ) -> SchemaContext:
         """Rank and return the top-k most relevant tables from the schema for the given query."""
         if len(schema.tables) <= top_k:
+            logger.debug("Skipping LLM ranking because table count (%s) <= top_k (%s)", len(schema.tables), top_k)
             return schema
 
+        logger.debug("Requesting semantic table ranking for %s tables", len(schema.tables))
         prompt = build_ranker_prompt(self.config, schema, query, top_k, conversation)
         response = self.llm.complete([Message(role="user", content=prompt)])
         return parse_ranker_response(response, schema, top_k)
@@ -134,6 +141,7 @@ class AsyncSemanticRankerStage(AsyncPipelineStage):
 
         schema = state.schema_context
         if not schema:
+            logger.warning("No schema context available; skipping async semantic ranking")
             state.ranked_schema = None
             await self.callbacks.aon_ranker_end(0)
             return state
@@ -152,8 +160,10 @@ class AsyncSemanticRankerStage(AsyncPipelineStage):
         conversation: Optional[List[ConversationTurn]] = None,
     ) -> SchemaContext:
         if len(schema.tables) <= top_k:
+            logger.debug("Skipping async LLM ranking because table count (%s) <= top_k (%s)", len(schema.tables), top_k)
             return schema
 
+        logger.debug("Requesting async semantic table ranking for %s tables", len(schema.tables))
         prompt = build_ranker_prompt(self.config, schema, query, top_k, conversation)
         response = await self.llm.acomplete([Message(role="user", content=prompt)])
         return parse_ranker_response(response, schema, top_k)

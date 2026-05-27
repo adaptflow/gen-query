@@ -8,7 +8,10 @@ from genquery.core.callbacks import AsyncGenQueryCallbackHandler, GenQueryCallba
 
 
 from genquery.config import GenQueryConfig
+from genquery.logging import get_logger
 
+
+logger = get_logger(__name__)
 
 PLANNER_DEFAULT_PROMPT = """
 You are an expert database architect. You must generate an execution plan for a user's natural language query.
@@ -86,6 +89,7 @@ def parse_planner_response(response: str, fallback_query: str) -> QueryPlan:
         plan_data = json.loads(content)
         return QueryPlan(**plan_data)
     except Exception:
+        logger.warning("Failed to parse planner response; falling back to single-step plan", exc_info=True)
         return QueryPlan(
             strategy="single",
             steps=[
@@ -112,6 +116,8 @@ class QueryPlannerStage(PipelineStage):
         """Run the planner stage to generate a query execution plan."""
         self.callbacks.on_planner_start(state.query)
         schema = state.ranked_schema or state.schema_context
+        if not schema:
+            logger.warning("Planning without schema context")
         
         plan = self.plan(state.query, schema, conversation=state.conversation)
         state.plan = plan
@@ -126,6 +132,7 @@ class QueryPlannerStage(PipelineStage):
         conversation: Optional[List[ConversationTurn]] = None,
     ) -> QueryPlan:
         """Generate a query plan using the LLM based on the query, schema, and conversation."""
+        logger.debug("Requesting query plan from LLM")
         prompt = build_planner_prompt(self.config, query, schema, conversation)
         response = self.llm.complete([Message(role="user", content=prompt)])
         return parse_planner_response(response, query)
@@ -143,6 +150,8 @@ class AsyncQueryPlannerStage(AsyncPipelineStage):
     async def run(self, state: PipelineState) -> PipelineState:
         await self.callbacks.aon_planner_start(state.query)
         schema = state.ranked_schema or state.schema_context
+        if not schema:
+            logger.warning("Planning asynchronously without schema context")
 
         plan = await self.plan(state.query, schema, conversation=state.conversation)
         state.plan = plan
@@ -156,6 +165,7 @@ class AsyncQueryPlannerStage(AsyncPipelineStage):
         schema: SchemaContext,
         conversation: Optional[List[ConversationTurn]] = None,
     ) -> QueryPlan:
+        logger.debug("Requesting async query plan from LLM")
         prompt = build_planner_prompt(self.config, query, schema, conversation)
         response = await self.llm.acomplete([Message(role="user", content=prompt)])
         return parse_planner_response(response, query)

@@ -11,7 +11,10 @@ from genquery.pipeline.state import AsyncPipelineStage, PipelineStage, PipelineS
 
 from genquery.config import GenQueryConfig
 from genquery.pipeline.executor.modifier import apply_security_and_limits
+from genquery.logging import get_logger
 
+
+logger = get_logger(__name__)
 
 GENERATOR_DEFAULT_PROMPT = """
 You are an expert SQL Generator. Your task is to generate ONLY a valid SQL query in {dialect} dialect.
@@ -313,7 +316,11 @@ class QueryExecutorStage(PipelineStage):
         batch_size = state.context.get("stream_batch_size", self.config.stream_batch_size)
         
         if not state.plan:
+            logger.error("QueryExecutorStage received state without a query plan")
             raise ExecutionError("QueryPlan is required for QueryExecutorStage")
+        if not schema:
+            logger.error("QueryExecutorStage received state without a schema context")
+            raise ExecutionError("SchemaContext is required for QueryExecutorStage")
             
         conversation_context = format_conversation(state.conversation)
         final_result = self.execute_plan(
@@ -357,6 +364,7 @@ class QueryExecutorStage(PipelineStage):
             previous_results=previous_results,
             conversation_context=conversation_context,
         )
+        logger.debug("Requesting SQL generation for step %s", step.id)
         response = self.llm.complete([Message(role="user", content=prompt)])
         return clean_generated_sql(response)
 
@@ -401,12 +409,14 @@ class QueryExecutorStage(PipelineStage):
                 # 2. Validate
                 if not self.validator.validate(sql):
                     error_context = "Query failed security validation: Only read operations (SELECT) are allowed."
+                    logger.warning("Security validation failed for step %s on attempt %s", step.id, attempt + 1)
                     self.callbacks.on_retry(step.id, error_context, attempt + 1)
                     continue
                 
                 # 3. Execute
                 try:
                     if should_stream_step:
+                        logger.debug("Opening streaming result for final step %s", step.id)
                         sql = apply_query_modifiers(sql, schema, self.config)
                         stream = PolarsBatchStream(
                             self.engine,
@@ -439,15 +449,18 @@ class QueryExecutorStage(PipelineStage):
                             
                         df = pl.read_database(query=query_to_run, connection=conn)
                         result_df = df
+                        logger.debug("Step %s returned %s rows", step.id, len(df))
                         success = True
                         if not dry_run:
                             self.callbacks.on_execution_success(step.id, len(df))
                         break
                 except Exception as e:
                     error_context = f"Database error: {str(e)}"
+                    logger.warning("Database execution failed for step %s on attempt %s: %s", step.id, attempt + 1, e)
                     self.callbacks.on_retry(step.id, error_context, attempt + 1)
             
             if not success:
+                logger.error("Failed to execute step %s after %s attempts", step.id, self.max_retries)
                 raise ExecutionError(f"Failed to execute step {step.id} after {self.max_retries} attempts. Last error: {error_context}")
             
             # Store result
@@ -479,8 +492,10 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
         batch_size = state.context.get("stream_batch_size", self.config.stream_batch_size)
 
         if not state.plan:
+            logger.error("AsyncQueryExecutorStage received state without a query plan")
             raise ExecutionError("QueryPlan is required for AsyncQueryExecutorStage")
         if not schema:
+            logger.error("AsyncQueryExecutorStage received state without a schema context")
             raise ExecutionError("SchemaContext is required for AsyncQueryExecutorStage")
 
         conversation_context = format_conversation(state.conversation)
@@ -525,6 +540,7 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
             previous_results=previous_results,
             conversation_context=conversation_context,
         )
+        logger.debug("Requesting async SQL generation for step %s", step.id)
         response = await self.llm.acomplete([Message(role="user", content=prompt)])
         return clean_generated_sql(response)
 
@@ -563,6 +579,7 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
 
                 if not self.validator.validate(sql):
                     error_context = "Query failed security validation: Only read operations (SELECT) are allowed."
+                    logger.warning("Async security validation failed for step %s on attempt %s", step.id, attempt + 1)
                     await self.callbacks.aon_retry(step.id, error_context, attempt + 1)
                     continue
 
@@ -571,6 +588,7 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
                     query_to_run = f"EXPLAIN {sql}" if dry_run else sql
 
                     if should_stream_step:
+                        logger.debug("Opening async streaming result for final step %s", step.id)
                         stream = await AsyncPolarsBatchStream(
                             self.engine,
                             query_to_run,
@@ -599,6 +617,7 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
                             columns = list(result.keys())
                             rows = [dict(row) for row in result.mappings().all()]
                             result_df = pl.DataFrame(rows) if rows else pl.DataFrame({column: [] for column in columns})
+                            logger.debug("Async step %s returned %s rows", step.id, len(result_df))
 
 
                     success = True
@@ -607,9 +626,11 @@ class AsyncQueryExecutorStage(AsyncPipelineStage):
                     break
                 except Exception as e:
                     error_context = f"Database error: {str(e)}"
+                    logger.warning("Async database execution failed for step %s on attempt %s: %s", step.id, attempt + 1, e)
                     await self.callbacks.aon_retry(step.id, error_context, attempt + 1)
 
             if not success:
+                logger.error("Failed to execute step %s after %s attempts", step.id, self.max_retries)
                 raise ExecutionError(f"Failed to execute step {step.id} after {self.max_retries} attempts. Last error: {error_context}")
 
             if step.output_alias:

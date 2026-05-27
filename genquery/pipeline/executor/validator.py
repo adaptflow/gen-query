@@ -1,4 +1,7 @@
 import sqlglot
+from genquery.logging import get_logger
+
+logger = get_logger(__name__)
 
 class SecurityValidator:
     """
@@ -20,6 +23,7 @@ class SecurityValidator:
             # Parse the SQL string into sqlglot AST expression(s)
             parsed = sqlglot.parse(sql, read=self.dialect)
             if not parsed:
+                logger.warning("SQL validation failed: parser returned no statements")
                 return False
                 
             for expr in parsed:
@@ -27,12 +31,13 @@ class SecurityValidator:
                     continue
                 # We enforce that the root level statement is a Select (or similar read-only like Union)
                 if not isinstance(expr, (sqlglot.exp.Select, sqlglot.exp.Union)):
+                    logger.warning("SQL validation failed: non-read-only statement detected (%s)", type(expr).__name__)
                     return False
                     
                 # Advanced checking could walk the AST to ensure no destructive subqueries,
                 # but typically sqlglot's parser distinguishes query types well.
             return True
-        except Exception as e:
+        except Exception as exc:
             # If it fails to parse, it's safer to consider it invalid.
-            print(f"Error occurred while validating SQL: {e}")
+            logger.warning("SQL validation failed while parsing: %s", exc, exc_info=True)
             return False

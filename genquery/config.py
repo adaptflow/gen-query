@@ -1,6 +1,6 @@
 import yaml
 from pydantic import BaseModel, Field
-from typing import List, Optional, Pattern, Dict, Any
+from typing import List, Optional, Pattern, Dict, Any, Union
 import os
 
 class TableFilterConfig(BaseModel):
@@ -47,6 +47,7 @@ class GenQueryConfig(BaseModel):
     schema_cache_dir: str = ".gq_cache"
     row_limit: int = 1000
     stream_batch_size: int = 10000
+    log_level: Union[str, int] = "INFO"
 
     @classmethod
     def from_yaml(cls, path: str, connection_string: Optional[str] = None, schema_name: Optional[str] = None, connect_args: Optional[Dict[str, Any]] = None) -> "GenQueryConfig":

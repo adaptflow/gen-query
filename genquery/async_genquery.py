@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from genquery.adapters.base import AsyncLLMAdapter
@@ -13,6 +13,9 @@ from genquery.pipeline.executor.validator import SecurityValidator
 from genquery.core.callbacks import AsyncGenQueryCallbackHandler, ensure_async_callback_handler
 from genquery.core.models import ConversationTurn
 from genquery.core.utils import get_dialect
+from genquery.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 class AsyncGenQuery:
     """
@@ -36,11 +39,14 @@ class AsyncGenQuery:
         callbacks: Optional[AsyncGenQueryCallbackHandler] = None,
         custom_stages: Optional[List[AsyncPipelineStage]] = None,
         engine: Optional[AsyncEngine] = None,
+        log_level: Optional[Union[str, int]] = None,
     ):
         if config is not None:
             self.config = config
             if connect_args:
                 self.config.connect_args = {**self.config.connect_args, **connect_args}
+            if log_level is not None:
+                self.config.log_level = log_level
         elif config_path:
             self.config = GenQueryConfig.from_yaml(
                 config_path,
@@ -48,14 +54,27 @@ class AsyncGenQuery:
                 schema_name=schema,
                 connect_args=connect_args
             )
+            if log_level is not None:
+                self.config.log_level = log_level
         else:
             filter_config = TableFilterConfig(**table_filter) if table_filter else TableFilterConfig()
             self.config = GenQueryConfig(
                 connection_string=connection_string,
                 schema_name=schema,
                 connect_args=connect_args or {},
-                table_filters=filter_config
+                table_filters=filter_config,
+                log_level=log_level or "INFO"
             )
+
+        configure_logging(self.config.log_level)
+        logger.info("Initializing AsyncGenQuery")
+        logger.debug(
+            "Resolved AsyncGenQuery configuration: schema=%s, row_limit=%s, stream_batch_size=%s, log_level=%s",
+            self.config.schema_name,
+            self.config.row_limit,
+            self.config.stream_batch_size,
+            self.config.log_level,
+        )
 
         self.llm = llm
         self.callbacks = ensure_async_callback_handler(callbacks)
@@ -77,6 +96,7 @@ class AsyncGenQuery:
             self.engine = create_async_engine(self.config.connection_string, connect_args=engine_connect_args)
 
         dialect_name = get_dialect(self.engine)
+        logger.debug("Created async SQLAlchemy engine for dialect=%s", dialect_name)
 
         if dialect_name == "oracle" and self.config.schema_name:
             @event.listens_for(self.engine.sync_engine, "connect", insert=True)
@@ -89,8 +109,10 @@ class AsyncGenQuery:
 
         if custom_stages is not None:
             self.pipeline = AsyncGenQueryPipeline(stages=custom_stages)
+            logger.debug("Using %s custom async pipeline stages", len(custom_stages))
         else:
             self.pipeline = self._build_default_pipeline()
+        logger.info("AsyncGenQuery initialized for dialect=%s", dialect_name)
 
     def _build_default_pipeline(self) -> AsyncGenQueryPipeline:
         pipeline = AsyncGenQueryPipeline()
@@ -123,7 +145,11 @@ class AsyncGenQuery:
             conversation=conversation or [],
             context={"dry_run": False}
         )
-        return await self.pipeline.execute(state)
+        try:
+            return await self.pipeline.execute(state)
+        except Exception:
+            logger.exception("Failed to generate async query result")
+            raise
 
     async def stream(
         self,
@@ -152,7 +178,11 @@ class AsyncGenQuery:
                 "stream_batch_size": batch_size or self.config.stream_batch_size,
             }
         )
-        return await self.pipeline.execute(state)
+        try:
+            return await self.pipeline.execute(state)
+        except Exception:
+            logger.exception("Failed to stream async query result")
+            raise
 
     async def run(
         self,
@@ -172,10 +202,15 @@ class AsyncGenQuery:
             conversation=conversation or [],
             context={"dry_run": False}
         )
-        result = await self.pipeline.execute(state)
-        if return_result:
-            return result
-        return result.df
+        try:
+            result = await self.pipeline.execute(state)
+            logger.debug("Async query execution completed")
+            if return_result:
+                return result
+            return result.df
+        except Exception:
+            logger.exception("Failed to run async query")
+            raise
 
     async def dry_run(
         self,
@@ -202,10 +237,15 @@ class AsyncGenQuery:
             conversation=conversation or [],
             context={"dry_run": True}
         )
-        return await self.pipeline.execute(state)
+        try:
+            return await self.pipeline.execute(state)
+        except Exception:
+            logger.exception("Failed to perform async dry run")
+            raise
 
     async def close(self) -> None:
         """Dispose the async SQLAlchemy engine and close pooled connections."""
+        logger.debug("Disposing async SQLAlchemy engine")
         await self.engine.dispose()
 
     async def __aenter__(self) -> "AsyncGenQuery":

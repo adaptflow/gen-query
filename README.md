@@ -13,7 +13,9 @@ GenQuery is an agentic, highly customizable Natural Language to SQL generation a
 - **Dry Run Mode**: Use `dry_run()` to safely generate SQL and execution plans without executing against the database. Perfect for debugging, review, or understanding how a query will be interpreted before running it.
 - **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full final result in memory. Both sync and async streaming are supported.
 - **Command-Line Interface**: Run one-liners directly from your terminal with the `genquery` CLI entry point.
+- **Configurable Logging**: Package logging defaults to `INFO` with minimal info-level output; switch to `DEBUG` for detailed diagnostics.
 - **Customizable**: Swap out any pipeline stage to fit your specific needs or integrate with your own systems.
+
 
 ## Architecture
 
@@ -141,7 +143,11 @@ genquery "Find all transactions of this week" --conn postgresql://user:pass@loca
 
 # Point to a custom OpenAI-compatible endpoint
 genquery "Find recent orders" --conn sqlite:///app.db --base-url https://openrouter.ai/api/v1 --api-key dummy-key
+
+# Enable detailed debug logs
+genquery "Count orders by status" --conn sqlite:///app.db --log-level DEBUG
 ```
+
 
 All arguments:
 | Argument | Required | Default | Description |
@@ -153,6 +159,7 @@ All arguments:
 | `--base-url` | ❌ | `https://api.openai.com/v1` | Base URL for the OpenAI-compatible API. Useful for local proxies, self-hosted models, or alternative providers. |
 | `--schema` | ❌ | `public` | Database schema |
 | `--config` | ❌ | `None` | Path to YAML config file |
+| `--log-level` | ❌ | `INFO` | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 
 For development, install the package in editable mode to test changes:
 
@@ -308,10 +315,12 @@ config = GenQueryConfig(
     statement_timeout_ms=10000,
     row_limit=100,
     stream_batch_size=10000,
+    log_level="INFO",
     rls_policies=[RLSPolicy(column="tenant_id", value="t-12345")],
 )
 
 gq = GenQuery(llm=llm, config=config)
+
 ```
 
 For async usage, use an async SQLAlchemy connection string:
@@ -325,9 +334,11 @@ config = GenQueryConfig(
     schema_name="public",
     row_limit=100,
     stream_batch_size=10000,
+    log_level="INFO",
 )
 
 gq = AsyncGenQuery(llm=async_llm, config=config)
+
 ```
 
 ### YAML Configuration
@@ -339,8 +350,10 @@ schema_name: "public"
 statement_timeout_ms: 10000
 row_limit: 100
 stream_batch_size: 10000
+log_level: "INFO"
 rls_policies:
   - column: "tenant_id"
+
     value: "t-12345"
 table_filters:
   exclude: ["migrations", "audit_logs"]
@@ -350,9 +363,31 @@ table_filters:
 gq = GenQuery(llm=llm, config_path="config.yaml")
 ```
 
+### Logging
+
+Logging is configured through the package-level `genquery` logger. The default level is `INFO`, and info-level messages are intentionally minimal to avoid overhead/noise. Use `DEBUG` when troubleshooting pipeline stages, schema cache behavior, SQL generation retries, or execution failures.
+
+You can set the level in code, configuration, or the CLI:
+
+```python
+from genquery import GenQuery, configure_logging
+
+configure_logging("DEBUG")
+gq = GenQuery(llm=llm, connection_string="sqlite:///app.db", log_level="DEBUG")
+```
+
+```yaml
+log_level: "DEBUG"
+```
+
+```bash
+genquery "Count orders" --conn sqlite:///app.db --log-level DEBUG
+```
+
 ## Supported LLMs
 
 GenQuery includes synchronous adapters for:
+
 
 - `OpenAIAdapter`
 - `AnthropicAdapter`
