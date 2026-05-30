@@ -7,10 +7,10 @@ const darkCodeTheme = require('prism-react-renderer').themes.dracula;
 const config = {
   title: 'GenQuery',
   tagline: 'Agentic Natural Language to SQL for Python',
-  url: 'https://genquery.dev',
-  baseUrl: '/',
-
-  organizationName: 'genquery',
+  url: 'https://adaptflow.github.io',
+  baseUrl: '/genquery',
+  trailingSlash: false,
+  organizationName: 'adaptflow',
   projectName: 'genquery',
 
   onBrokenLinks: 'throw',
@@ -75,7 +75,7 @@ const config = {
             position: 'right',
           },
           {
-            href: 'https://github.com/genquery/genquery',
+            href: 'https://github.com/adaptflow/gen-query',
             label: 'GitHub',
             position: 'right',
           },
@@ -97,8 +97,8 @@ const config = {
             title: 'Project',
             items: [
               { label: 'PyPI', href: 'https://pypi.org/project/genquery/' },
-              { label: 'GitHub', href: 'https://github.com/genquery/genquery' },
-              { label: 'Issues', href: 'https://github.com/genquery/genquery/issues' },
+              { label: 'GitHub', href: 'https://github.com/adaptflow/gen-query' },
+              { label: 'Issues', href: 'https://github.com/adaptflow/gen-query/issues' },
             ],
           },
         ],
