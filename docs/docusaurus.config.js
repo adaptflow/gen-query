@@ -8,10 +8,10 @@ const config = {
   title: 'GenQuery',
   tagline: 'Agentic Natural Language to SQL for Python',
   url: 'https://adaptflow.github.io',
-  baseUrl: '/genquery',
+  baseUrl: '/gen-query',
   trailingSlash: false,
   organizationName: 'adaptflow',
-  projectName: 'genquery',
+  projectName: 'gen-query',
 
   onBrokenLinks: 'throw',
 
@@ -37,7 +37,7 @@ const config = {
       ({
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          editUrl: 'https://github.com/genquery/genquery/tree/main/website/',
+          editUrl: 'https://github.com/adaptflow/gen-query/tree/main/docs/',
         },
         blog: false,
         theme: {
@@ -96,7 +96,7 @@ const config = {
           {
             title: 'Project',
             items: [
-              { label: 'PyPI', href: 'https://pypi.org/project/genquery/' },
+              { label: 'PyPI', href: 'https://pypi.org/project/gen-query/' },
               { label: 'GitHub', href: 'https://github.com/adaptflow/gen-query' },
               { label: 'Issues', href: 'https://github.com/adaptflow/gen-query/issues' },
             ],

@@ -26,4 +26,4 @@ npm run build
 npm run serve
 ```
 
-The generated production output is written to `website/build/` and is ignored by Git.
+The generated production output is written to `docs/build/` and is ignored by Git.
