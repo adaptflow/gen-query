@@ -96,7 +96,7 @@ const config = {
           {
             title: 'Project',
             items: [
-              { label: 'PyPI', href: 'https://pypi.org/project/gen-query/' },
+              { label: 'PyPI', href: 'https://pypi.org/project/genquery/' },
               { label: 'GitHub', href: 'https://github.com/adaptflow/gen-query' },
               { label: 'Issues', href: 'https://github.com/adaptflow/gen-query/issues' },
             ],
