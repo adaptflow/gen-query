@@ -14,15 +14,20 @@ const config = {
   projectName: 'genquery',
 
   onBrokenLinks: 'throw',
-  markdown: {
-    hooks: {
-      onBrokenMarkdownLinks: 'warn',
-    },
-  },
 
   i18n: {
     defaultLocale: 'en',
     locales: ['en'],
+  },
+
+  themes: [
+    '@docusaurus/theme-mermaid',
+  ],
+  markdown: {
+    mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
   },
 
   presets: [
