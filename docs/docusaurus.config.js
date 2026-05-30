@@ -102,7 +102,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} GenQuery. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} AdaptFlow.`,
       },
       prism: {
         theme: lightCodeTheme,

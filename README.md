@@ -1,5 +1,13 @@
 # GenQuery
 
+[![PyPI version](https://img.shields.io/pypi/v/genquery.svg)](https://pypi.org/project/genquery/)
+[![License](https://img.shields.io/github/license/adaptflow/gen-query.svg)](https://github.com/adaptflow/gen-query/blob/main/LICENSE)
+[![Downloads](https://img.shields.io/badge/downloads-PyPI-blue.svg)](https://pypi.org/project/genquery/)
+
+[![Documentation](https://img.shields.io/badge/docs-Read%20the%20full%20documentation-blue?style=for-the-badge)](https://adaptflow.github.io/gen-query/)
+
+Read the full documentation, guides, and examples at **[adaptflow.github.io/gen-query](https://adaptflow.github.io/gen-query/)**.
+
 GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as Polars DataFrames or streaming Polars batches.
 
 ## Key Features
