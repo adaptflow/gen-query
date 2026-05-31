@@ -6,11 +6,11 @@
 
 [![Documentation](https://img.shields.io/badge/docs-Read%20the%20full%20documentation-blue?style=for-the-badge)](https://adaptflow.github.io/gen-query/)
 
-[![Quick Start Notebook](https://img.shields.io/badge/notebook-Quick%20Start%20with%20SQLite%20%26%20Charts-orange?style=for-the-badge)](docs/quickstart_sqlite_charts.ipynb)
+[![Quick Start Notebook](https://img.shields.io/badge/notebook-Quick%20Start%20with%20SQLite%20%26%20Charts-orange?style=for-the-badge)](examples/quickstart_sqlite_charts.ipynb)
 
 Read the full documentation, guides, and examples at **[adaptflow.github.io/gen-query](https://adaptflow.github.io/gen-query/)**.
 
-For an interactive, beginner-friendly walkthrough, check out the [**Quick Start Notebook**](docs/quickstart_sqlite_charts.ipynb) — it uses SQLite and sample HR data so you can run everything locally without needing PostgreSQL or any other external database server.
+For an interactive, beginner-friendly walkthrough, check out the [**Quick Start Notebook**](examples/quickstart_sqlite_charts.ipynb) — it uses SQLite and sample HR data so you can run everything locally without needing PostgreSQL or any other external database server.
 
 ## Summary
 GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as Polars DataFrames or streaming Polars batches.
