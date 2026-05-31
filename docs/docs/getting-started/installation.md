@@ -10,13 +10,25 @@ Install GenQuery from PyPI:
 pip install genquery
 ```
 
+## Optional feature dependencies
+
+`pip install genquery` installs the core package dependencies and the OpenAI adapter dependency. Some adapters and features import provider-specific packages only when you use them, so install the packages for the features you need:
+
+| Feature | Install when needed |
+|---|---|
+| YAML configuration files (`config_path` / `GenQueryConfig.from_yaml`) | `pip install pyyaml` |
+| Anthropic adapters | `pip install anthropic` |
+| Gemini adapters | `pip install google-generativeai` |
+| LangChain adapters | `pip install langchain langchain-core` |
+| Ollama adapters | `pip install requests` |
+
 ## Manual dependency installation
 
 If you are installing dependencies manually for local development, install the core dependencies and your preferred LLM provider package:
 
 ```bash terminal
-pip install sqlalchemy polars pydantic sqlglot pyyaml requests
-pip install openai anthropic google-generativeai langchain
+pip install sqlalchemy polars pydantic sqlglot pyyaml requests openai
+pip install anthropic google-generativeai langchain langchain-core
 ```
 
 ## Database driver extras

@@ -35,7 +35,7 @@ AsyncGenQuery(
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `llm` | `AsyncLLMAdapter` | Required | Async LLM adapter used by async pipeline stages. |
-| `connection_string` | `str \| None` | `None` | Async SQLAlchemy database URL. Required unless supplied by `config`, `config_path`, or `engine`. |
+| `connection_string` | `str \| None` | `None` | Async SQLAlchemy database URL. Required unless supplied by `config` or `config_path`. Even when passing an existing `engine`, the resolved `GenQueryConfig` still needs a `connection_string`. |
 | `schema` | `str` | `"public"` | Database schema name. |
 | `config` | `GenQueryConfig \| None` | `None` | Full configuration object. Takes precedence over individual parameters. |
 | `connect_args` | `dict \| None` | `None` | Extra arguments passed to SQLAlchemy `create_async_engine()`. |
@@ -43,7 +43,7 @@ AsyncGenQuery(
 | `config_path` | `str \| None` | `None` | Path to a YAML config file. |
 | `callbacks` | `AsyncGenQueryCallbackHandler \| GenQueryCallbackHandler \| None` | `None` | Async callbacks or sync callbacks that will be wrapped. |
 | `custom_stages` | `list[AsyncPipelineStage] \| None` | `None` | Custom async stages to use instead of the default pipeline. |
-| `engine` | `AsyncEngine \| None` | `None` | Existing SQLAlchemy async engine. |
+| `engine` | `AsyncEngine \| None` | `None` | Existing SQLAlchemy async engine. When supplied, `AsyncGenQuery` uses it instead of creating one, but configuration still must include a valid `connection_string`. |
 | `log_level` | `str \| int \| None` | `None` | Logging level override. |
 
 ## Recommended lifecycle
@@ -106,7 +106,7 @@ print(result.df)
 await gq.dry_run(query, conversation=None)
 ```
 
-Generates SQL and an execution plan without executing the final query.
+Generates SQL and an execution plan without running the final SQL as a data-returning query. The returned `QueryResult.df` contains the database's `EXPLAIN` output, and `QueryResult.stream` is `None`.
 
 ```python dry_run.py
 result = await gq.dry_run("Show top customers this year")

@@ -6,6 +6,8 @@ title: Configuration API
 
 Configuration models are Pydantic models in `genquery.config`.
 
+YAML loading uses `PyYAML`; install `pyyaml` before using `GenQueryConfig.from_yaml()` or constructor `config_path` if it is not already installed in your environment.
+
 ## Imports
 
 ```python imports.py

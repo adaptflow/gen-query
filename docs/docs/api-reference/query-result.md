@@ -40,7 +40,7 @@ QueryResult(
 | `sql` | `str \| None` | Final generated SQL. |
 | `plan` | `Any` | Query plan object, usually `QueryPlan`. |
 | `steps` | `Any` | Plan steps, usually `list[PlanStep]`. |
-| `df` | `Any` | Final Polars DataFrame for non-streaming execution. |
+| `df` | `Any` | Final Polars DataFrame for non-streaming execution; for dry runs, the database's `EXPLAIN` output. |
 | `stream` | `Any` | Sync or async final-result stream. |
 | `conversation` | `list[ConversationTurn]` | Updated conversation history. |
 
@@ -57,15 +57,15 @@ print(result.df)
 
 ## Returned by `dry_run()`
 
-Dry runs do not execute the generated query.
+Dry runs do not run the generated SQL as a normal data-returning query. They execute `EXPLAIN <generated SQL>` and return that explanation in `df`.
 
 ```python dry_run_result.py
 result = gq.dry_run("Show top customers this year")
 
-print(result.sql)
+print(result.sql)    # generated SQL without the EXPLAIN prefix
 print(result.plan)
 print(result.steps)
-assert result.df is None
+print(result.df)     # Polars DataFrame containing EXPLAIN output
 assert result.stream is None
 ```
 

@@ -218,11 +218,12 @@ class AsyncGenQuery:
         conversation: Optional[List[ConversationTurn]] = None,
     ) -> QueryResult:
         """
-        Generate SQL and execution plan WITHOUT executing against the database.
+        Generate SQL and execution plan without running the final SQL as a data query.
 
         Safely inspect the generated SQL and step-by-step plan before running
-        anything. Useful for debugging, review, or understanding how the system
-        interprets a natural-language query.
+        the query normally. The pipeline validates the SQL by issuing an
+        EXPLAIN statement against the database. Useful for debugging, review,
+        or understanding how the system interprets a natural-language query.
 
         Args:
             query: The natural-language query to analyze.
@@ -230,7 +231,8 @@ class AsyncGenQuery:
 
         Returns:
             A QueryResult containing the generated SQL, the execution plan,
-            and steps — but no DataFrame or stream (df will be None).
+            steps, and a DataFrame with the database's EXPLAIN output. The
+            stream field will be None.
         """
         state = PipelineState(
             query=query,

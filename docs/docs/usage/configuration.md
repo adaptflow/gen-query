@@ -6,7 +6,11 @@ title: Configuration
 
 You can configure GenQuery through constructor parameters, a `GenQueryConfig` object, or a YAML file.
 
-Configuration controls database connection behavior, table filters, row limits, stream batch sizes, statement timeouts, logging, and Row-Level Security policies.
+Configuration controls database connection behavior, table filters, schema caching, custom prompt paths, row limits, stream batch sizes, statement timeouts, logging, and Row-Level Security policies.
+
+:::note
+YAML configuration uses `PyYAML`. If your installation does not include it, install it with `pip install pyyaml` before using `config_path` or `GenQueryConfig.from_yaml()`.
+:::
 
 ## Python configuration
 
@@ -54,6 +58,8 @@ schema_name: "public"
 statement_timeout_ms: 10000
 row_limit: 100
 stream_batch_size: 10000
+schema_cache_ttl_seconds: 3600
+schema_cache_dir: ".gq_cache"
 log_level: "INFO"
 rls_policies:
   - column: "tenant_id"
@@ -76,6 +82,9 @@ gq = GenQuery(llm=llm, config_path="config.yaml")
 | `schema_name` | Database schema to inspect. |
 | `connect_args` | Driver-specific connection arguments. |
 | `table_filters` | Include or exclude tables from schema inspection. |
+| `prompts` | Optional paths for custom ranker, planner, and SQL generator prompts. |
+| `schema_cache_ttl_seconds` | Time-to-live for cached schema metadata. |
+| `schema_cache_dir` | Directory where schema cache files are stored. |
 | `statement_timeout_ms` | Maximum statement execution time where supported. |
 | `row_limit` | Maximum number of rows returned. |
 | `stream_batch_size` | Default batch size for streaming. |

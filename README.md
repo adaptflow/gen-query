@@ -18,7 +18,7 @@ GenQuery is an agentic, highly customizable Natural Language to SQL generation a
 - **Async LLM Support**: Async adapters are available for OpenAI, Anthropic, Gemini, LangChain, and Ollama.
 - **Security-First**: Enforces strictly read-only (`SELECT`) queries via AST validation and injects Row-Level Security (RLS) policies dynamically.
 - **Enterprise Scale**: Includes semantic table ranking to avoid context limits, execution plans for complex queries, schema caching, final-result streaming, configurable row limits, and statement timeouts.
-- **Dry Run Mode**: Use `dry_run()` to safely generate SQL and execution plans without executing against the database. Perfect for debugging, review, or understanding how a query will be interpreted before running it.
+- **Dry Run Mode**: Use `dry_run()` to safely generate SQL, validate it with `EXPLAIN`, and inspect execution plans without running the generated SQL as a normal data-returning query. Perfect for debugging, review, or understanding how a query will be interpreted before running it.
 - **Streaming Results**: Use `stream()` to consume large final query results as Polars DataFrame batches without materializing the full final result in memory. Both sync and async streaming are supported.
 - **Command-Line Interface**: Run one-liners directly from your terminal with the `genquery` CLI entry point.
 - **Configurable Logging**: Package logging defaults to `INFO` with minimal info-level output; switch to `DEBUG` for detailed diagnostics.
@@ -117,7 +117,7 @@ print(result.df)
 
 ### Dry Run (Safe Inspection)
 
-Use `dry_run()` to generate SQL and the execution plan **without executing against the database**:
+Use `dry_run()` to generate SQL and the execution plan **without running the generated SQL as a normal data-returning query**:
 
 ```python
 result = gq.dry_run("Show me the top 5 customers by total order amount this year")
@@ -130,7 +130,7 @@ for step in result.steps:
     print(f"  - {step.description}")
 ```
 
-The `dry_run()` method runs the full pipeline through schema inspection, table ranking, SQL generation, and security validation — then prefixes the generated SQL with `EXPLAIN` instead of executing it. The returned `QueryResult` contains the generated SQL, the execution plan, and the step-by-step plan details, but `df` and `stream` will be `None`. This is completely safe for debugging, reviewing generated SQL, or understanding how the system interprets a natural-language query before running it against live data.
+The `dry_run()` method runs the full pipeline through schema inspection, table ranking, SQL generation, security validation, SQL modifiers such as row limits/RLS injection, and then sends `EXPLAIN <generated SQL>` to the database. The returned `QueryResult.sql` contains the generated SQL without the `EXPLAIN` prefix; `df` contains the database's `EXPLAIN` output as a Polars DataFrame; and `stream` is `None`. This is useful for debugging, reviewing generated SQL, or understanding how the system interprets a natural-language query before running it against live data.
 
 ## CLI Quick Start
 
@@ -232,7 +232,7 @@ for step in result.steps:
     print(f"  - {step.description}")
 ```
 
-The async `dry_run()` behaves identically to its sync counterpart — it generates SQL and an execution plan without executing against the database, returning a `QueryResult` with `sql`, `plan`, and `steps` populated, but `df` and `stream` set to `None`.
+The async `dry_run()` behaves identically to its sync counterpart — it generates SQL and an execution plan without running the generated SQL as a normal result query, returning a `QueryResult` with `sql`, `plan`, and `steps` populated, `df` set to the database's `EXPLAIN` output, and `stream` set to `None`.
 
 ## Streaming Results
 

@@ -6,6 +6,15 @@ title: LLM Adapters API
 
 LLM adapters provide the model interface used by GenQuery pipeline stages.
 
+OpenAI support is available with the base package dependencies. Other adapter modules import their provider SDKs only when you instantiate or use them, so install the matching package first:
+
+| Adapter module | Required external package |
+|---|---|
+| `anthropic_adapter` | `anthropic` |
+| `gemini_adapter` | `google-generativeai` |
+| `ollama_adapter` | `requests` and a running Ollama server |
+| `langchain_adapter` | `langchain-core` plus the LangChain model integration you pass as `runnable` |
+
 ## Adapter protocols
 
 ```python imports.py
@@ -94,7 +103,7 @@ OllamaAdapter(host="http://localhost:11434", model="llama3")
 AsyncOllamaAdapter(host="http://localhost:11434", model="llama3")
 ```
 
-The async Ollama adapter uses a worker thread for the HTTP request to avoid blocking the event loop without adding another required HTTP client dependency.
+The async Ollama adapter uses a worker thread for the HTTP request to avoid blocking the event loop. Both Ollama adapters require the `requests` package and a reachable Ollama HTTP server.
 
 ## LangChain adapters
 

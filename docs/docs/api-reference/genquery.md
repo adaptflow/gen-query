@@ -94,7 +94,7 @@ print(result.df)
 gq.dry_run(query, conversation=None)
 ```
 
-Generates SQL and an execution plan without executing the final query. The returned `QueryResult` contains `sql`, `plan`, and `steps`; `df` and `stream` are `None`.
+Generates SQL and an execution plan without running the final SQL as a data-returning query. The returned `QueryResult` contains `sql`, `plan`, and `steps`; `df` contains the database's `EXPLAIN` output and `stream` is `None`.
 
 ```python dry_run.py
 result = gq.dry_run("Show top customers this year")

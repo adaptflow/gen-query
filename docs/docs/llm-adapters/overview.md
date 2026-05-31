@@ -22,6 +22,26 @@ GenQuery includes synchronous and asynchronous adapters for common LLM providers
 - `AsyncOllamaAdapter`
 - `AsyncLangChainAdapter`
 
+## Provider package requirements
+
+OpenAI support is included with the base package dependencies. Other adapters import their provider package only when used:
+
+| Adapter family | Required package |
+|---|---|
+| Anthropic | `anthropic` |
+| Gemini | `google-generativeai` |
+| Ollama | `requests` and a running Ollama server |
+| LangChain | `langchain-core` plus the LangChain integration package for your model |
+
+Install only what you need, for example:
+
+```bash terminal
+pip install anthropic
+pip install google-generativeai
+pip install requests
+pip install langchain langchain-core
+```
+
 ## Example
 
 ```python llm_adapters.py

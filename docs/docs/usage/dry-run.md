@@ -4,7 +4,7 @@ title: Dry Run
 
 # Dry Run
 
-Use `dry_run()` to generate SQL and an execution plan without executing against the database.
+Use `dry_run()` to generate SQL and an execution plan without running the generated SQL as a data-returning query.
 
 Dry runs are useful for debugging, review workflows, approval gates, and understanding how a natural-language query will be interpreted.
 
@@ -36,19 +36,16 @@ for step in result.steps:
 
 ## Behavior
 
-`dry_run()` runs the pipeline through schema inspection, table ranking, SQL generation, and security validation. It then prefixes the generated SQL with `EXPLAIN` instead of executing it.
+`dry_run()` runs the pipeline through schema inspection, table ranking, SQL generation, security validation, SQL modifiers such as row limits/RLS injection, and then sends an `EXPLAIN <generated SQL>` statement to the database.
 
 The returned `QueryResult` includes:
 
-- `sql`
-- `plan`
-- `steps`
-
-The following fields are `None`:
-
-- `df`
-- `stream`
+- `sql`: the generated SQL text, without the `EXPLAIN` prefix.
+- `plan`: the logical execution plan.
+- `steps`: the individual plan steps.
+- `df`: a Polars DataFrame containing the database's `EXPLAIN` output.
+- `stream`: always `None` for dry runs.
 
 :::info
-Dry run does not execute the generated query, but it still needs database access for schema inspection.
+Dry run does not run the generated SQL as a normal result query, but it still needs database access for schema inspection and the `EXPLAIN` validation step.
 :::
