@@ -24,5 +24,5 @@ class ResultStore:
         for key in keys:
             df = self.get(key)
             if df is not None:
-                context += f"\nResult of {key}:\n{df.head(5).to_csv(index=False)}\n"
+                context += f"\nResult of {key}:\n{df.head(5).to_pandas().to_string(index=False)}\n"
         return context

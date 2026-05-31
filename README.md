@@ -6,8 +6,13 @@
 
 [![Documentation](https://img.shields.io/badge/docs-Read%20the%20full%20documentation-blue?style=for-the-badge)](https://adaptflow.github.io/gen-query/)
 
+[![Quick Start Notebook](https://img.shields.io/badge/notebook-Quick%20Start%20with%20SQLite%20%26%20Charts-orange?style=for-the-badge)](docs/quickstart_sqlite_charts.ipynb)
+
 Read the full documentation, guides, and examples at **[adaptflow.github.io/gen-query](https://adaptflow.github.io/gen-query/)**.
 
+For an interactive, beginner-friendly walkthrough, check out the [**Quick Start Notebook**](docs/quickstart_sqlite_charts.ipynb) — it uses SQLite and sample HR data so you can run everything locally without needing PostgreSQL or any other external database server.
+
+## Summary
 GenQuery is an agentic, highly customizable Natural Language to SQL generation and execution framework. It converts natural language queries into executable SQL, validates security, executes the queries against your database, and returns results as Polars DataFrames or streaming Polars batches.
 
 ## Key Features
@@ -44,13 +49,15 @@ Install GenQuery and the dependencies for your preferred LLM/database stack:
 pip install genquery
 ```
 
-For local development or manual dependency installation:
+Some adapters and features have provider-specific dependencies that are imported only when used:
 
-```bash
-pip install sqlalchemy polars pydantic sqlglot pyyaml requests
-# Plus your LLM provider of choice:
-# pip install openai anthropic google-generativeai langchain
-```
+| Feature | Install when needed |
+|---|---|
+| YAML configuration files (`config_path` / `GenQueryConfig.from_yaml`) | `pip install pyyaml` |
+| Anthropic adapters | `pip install anthropic` |
+| Gemini adapters | `pip install google-generativeai` |
+| LangChain adapters | `pip install langchain langchain-core` |
+| Ollama adapters | `pip install requests` |
 
 ### Database Driver Extras
 
@@ -81,6 +88,7 @@ pip install "genquery[all]"
 ```python
 from genquery import GenQuery
 from genquery.adapters.openai_adapter import OpenAIAdapter
+import plotly.express as px
 
 # 1. Initialize your LLM adapter
 llm = OpenAIAdapter(api_key="sk-...", model="gpt-5.5")
@@ -92,10 +100,27 @@ gq = GenQuery(
     schema="public",
 )
 
-# 3. Run a query
-df = gq.run("Show me the top 5 customers by total order amount this year")
-print(df)
+# 3. Run a query and return the result
+result = gq.run(
+    "Show total salary by department. Return columns named department and total_salary.",
+    return_result=True,
+)
+
+print(result.sql)
+
+# 4. Create a chart from the results
+df = result.df.sort("total_salary", descending=True)
+fig = px.bar(
+    df.to_pandas(),
+    x="department",
+    y="total_salary",
+    title="Total Salary by Department",
+    labels={"department": "Department", "total_salary": "Total Salary"},
+)
+fig.show()
 ```
+
+![Total Salary by Department Bar Chart](examples/total_salary_by_department.png)
 
 To receive SQL, plan, DataFrame, and updated conversation history:
 
@@ -307,7 +332,7 @@ async def query_database(payload: dict):
 
 ## Configuration
 
-You can configure GenQuery via code or a YAML file to enforce table filters, row limits, stream batch sizes, statement timeouts, and Row-Level Security (RLS).
+You can configure GenQuery via code or a YAML file to enforce table filters, schema caching, custom prompt paths, row limits, stream batch sizes, statement timeouts, and Row-Level Security (RLS). YAML configuration requires `pyyaml`.
 
 ### Python Configuration
 
@@ -358,10 +383,11 @@ schema_name: "public"
 statement_timeout_ms: 10000
 row_limit: 100
 stream_batch_size: 10000
+schema_cache_ttl_seconds: 3600
+schema_cache_dir: ".gq_cache"
 log_level: "INFO"
 rls_policies:
   - column: "tenant_id"
-
     value: "t-12345"
 table_filters:
   exclude: ["migrations", "audit_logs"]
@@ -410,6 +436,8 @@ Async adapters are also available:
 - `AsyncGeminiAdapter`
 - `AsyncOllamaAdapter`
 - `AsyncLangChainAdapter`
+
+Provider-specific packages are required for non-OpenAI adapters; see the installation section above.
 
 Example:
 
